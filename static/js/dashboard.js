@@ -167,6 +167,8 @@ function renderAccounts(list) {
           <button class="btn-run ${isRunning ? 'btn-running-active' : ''}" onclick="runAccount(${acc.id})" ${isRunning ? 'disabled' : ''}>
             ${isRunning ? '<span class="spinner-dot"></span> Running...' : '▶ Run'}
           </button>
+          <button class="btn-icon-action" id="btn-refresh-${acc.id}" title="Refresh Live Balance (#1)" onclick="refreshAccountBalance(${acc.id})">🔄</button>
+          <button class="btn-icon-action" title="Execution History (#2)" onclick="openHistoryModal(${acc.id})">📜</button>
           <button class="btn-icon-action" title="Edit Account" onclick="editAccount(${acc.id})">✏️</button>
           <button class="btn-icon-action btn-delete" title="Delete Account" onclick="deleteAccount(${acc.id})">🗑️</button>
         </div>
@@ -678,4 +680,175 @@ async function handleLogout() {
   localStorage.removeItem("ace_session_token");
   window.location.href = "/login";
 }
+
+// ==============================================================================
+// Live Account Balance Refresh (#1)
+// ==============================================================================
+async function refreshAccountBalance(id) {
+  const btn = document.getElementById(`btn-refresh-${id}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add("spinning");
+  }
+  appendTerminalLog(`[ACCOUNT] Refreshing live balance for account #${id}...`, "info");
+  try {
+    const res = await fetch(`/api/accounts/${id}/refresh-balance`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Refresh failed");
+    appendTerminalLog(`✅ Refreshed '${data.label || data.phone}': VIP ${data.vip_level} | Balance ${data.balance} GHS`, "success");
+    loadAccounts();
+    loadStats();
+  } catch (err) {
+    alert("Refresh Error: " + err.message);
+    appendTerminalLog(`❌ Refresh error on account #${id}: ${err.message}`, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove("spinning");
+    }
+  }
+}
+
+// ==============================================================================
+// Execution Run History & Audit Log (#2)
+// ==============================================================================
+async function openHistoryModal(accountId = null) {
+  const modal = document.getElementById("history-modal");
+  const tbody = document.getElementById("history-table-body");
+  const countBadge = document.getElementById("badge-history-count");
+  const title = document.getElementById("history-modal-title");
+
+  modal.classList.add("active");
+  tbody.innerHTML = `<tr><td colspan="6" class="table-empty">Loading audit records...</td></tr>`;
+
+  try {
+    const url = accountId ? `/api/history?account_id=${accountId}` : `/api/history`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Failed to load history");
+    const records = await res.json();
+    countBadge.innerText = records.length;
+
+    if (accountId) {
+      const acc = accounts.find(a => a.id === accountId);
+      title.innerText = acc ? `Audit History: ${acc.label || acc.phone}` : `Audit History: Account #${accountId}`;
+    } else {
+      title.innerText = "System Execution Audit History";
+    }
+
+    if (records.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No execution history recorded yet.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = records.map(r => `
+      <tr>
+        <td style="font-family:'JetBrains Mono',monospace; font-size:0.8rem; color:var(--text-dim); white-space:nowrap;">${escapeHtml(r.run_time || '')}</td>
+        <td><strong>${escapeHtml(r.label || r.phone || 'Account')}</strong><br><small style="color:var(--text-dim)">+233 ${escapeHtml(r.phone || '')}</small></td>
+        <td><span class="badge" style="background:${r.status && r.status.includes('Completed') ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}; color:${r.status && r.status.includes('Completed') ? 'var(--success)' : 'var(--danger)'};">${escapeHtml(r.status || 'N/A')}</span></td>
+        <td>${r.tasks_done || 0}</td>
+        <td style="color:var(--success); font-weight:600;">+${Number(r.earned || 0).toFixed(2)} GHS</td>
+        <td style="color:var(--accent-cyan); font-weight:600;">${escapeHtml(r.balance || '0')} GHS</td>
+      </tr>
+    `).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty" style="color:var(--danger)">Error: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function closeHistoryModal() {
+  document.getElementById("history-modal").classList.remove("active");
+}
+
+// ==============================================================================
+// Batch Account CSV Import (#11)
+// ==============================================================================
+function openImportModal() {
+  document.getElementById("import-modal").classList.add("active");
+  document.getElementById("import-status-banner").style.display = "none";
+}
+
+function closeImportModal() {
+  document.getElementById("import-modal").classList.remove("active");
+}
+
+function handleCsvFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById("csv-textarea").value = e.target.result;
+  };
+  reader.readAsText(file);
+}
+
+async function handleCsvImport(e) {
+  e.preventDefault();
+  const text = document.getElementById("csv-textarea").value.trim();
+  const statusBox = document.getElementById("import-status-banner");
+  const submitBtn = document.getElementById("btn-submit-import");
+
+  if (!text) {
+    alert("Please provide CSV content");
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner-dot"></span> Verifying & Importing...';
+  statusBox.style.display = "block";
+  statusBox.className = "verify-status-banner verify-loading";
+  statusBox.innerHTML = "⏳ Logging in and verifying each account against Ace775...";
+
+  try {
+    const res = await fetch("/api/accounts/import-csv", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ csv_text: text })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Import failed");
+
+    let msg = `✅ Successfully imported <strong>${data.imported}</strong> account(s).`;
+    if (data.errors && data.errors.length > 0) {
+      msg += `<br><span style="color:var(--danger)">Errors (${data.errors.length}):<br>${data.errors.map(e => escapeHtml(e)).join("<br>")}</span>`;
+      statusBox.className = "verify-status-banner verify-warning";
+    } else {
+      statusBox.className = "verify-status-banner verify-success";
+    }
+    statusBox.innerHTML = msg;
+
+    loadAccounts();
+    loadStats();
+
+    if (data.imported > 0 && (!data.errors || data.errors.length === 0)) {
+      setTimeout(() => {
+        closeImportModal();
+      }, 1500);
+    }
+  } catch (err) {
+    statusBox.className = "verify-status-banner verify-error";
+    statusBox.innerHTML = `❌ Import Failed: ${escapeHtml(err.message)}`;
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="btn-icon">⚡</span> Verify & Import All';
+  }
+}
+
+// ==============================================================================
+// Inactivity Session Auto-Lock (#14)
+// ==============================================================================
+let idleTimer = null;
+const IDLE_LIMIT_MS = 30 * 60 * 1000; // 30 minutes client-side lock
+
+function resetIdleTimer() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    alert("Session locked due to 30 minutes of inactivity for your security.");
+    handleLogout();
+  }, IDLE_LIMIT_MS);
+}
+
+["mousemove", "mousedown", "keypress", "touchstart", "scroll"].forEach(evt => {
+  window.addEventListener(evt, resetIdleTimer, { passive: true });
+});
+resetIdleTimer();
 

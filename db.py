@@ -5,9 +5,12 @@ Stores accounts, settings, run statistics, and 7-day analytics in SQLite.
 
 import os
 import sqlite3
+import base64
+import hashlib
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from cryptography.fernet import Fernet
 
 load_dotenv()
 
@@ -25,6 +28,41 @@ def normalize_phone(phone: str) -> str:
     elif p.startswith("0") and len(p) == 10:
         p = p[1:]
     return p
+
+
+# ==============================================================================
+# Security: AES-128-CBC / Fernet Reversible Encryption (#13)
+# ==============================================================================
+def _get_fernet() -> Fernet:
+    pwd = get_dashboard_password()
+    key_bytes = hashlib.sha256((pwd + "_ace775_security_pepper").encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(key_bytes))
+
+
+def encrypt_password(plain_text: str) -> str:
+    if not plain_text:
+        return ""
+    if plain_text.startswith("enc:"):
+        return plain_text
+    try:
+        f = _get_fernet()
+        token = f.encrypt(plain_text.encode("utf-8")).decode("utf-8")
+        return f"enc:{token}"
+    except Exception:
+        return plain_text
+
+
+def decrypt_password(cipher_text: str) -> str:
+    if not cipher_text:
+        return ""
+    if not cipher_text.startswith("enc:"):
+        return cipher_text
+    try:
+        f = _get_fernet()
+        token = cipher_text[4:]
+        return f.decrypt(token.encode("utf-8")).decode("utf-8")
+    except Exception:
+        return cipher_text
 
 
 def get_connection() -> sqlite3.Connection:
@@ -57,6 +95,21 @@ def init_db():
             total_tasks_done INTEGER DEFAULT 0,
             total_earned_ghs REAL DEFAULT 0.0,
             created_at TEXT DEFAULT ''
+        )
+    """)
+
+    # Run History table (#2)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS run_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER,
+            phone TEXT,
+            label TEXT,
+            run_time TEXT,
+            status TEXT,
+            tasks_done INTEGER DEFAULT 0,
+            earned REAL DEFAULT 0.0,
+            balance TEXT DEFAULT '0'
         )
     """)
 
@@ -118,37 +171,50 @@ def init_db():
     conn.close()
 
 
-def get_accounts() -> List[Dict[str, Any]]:
+def get_accounts(mask_passwords: bool = True) -> List[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM accounts ORDER BY id ASC")
-    rows = [dict(row) for row in cursor.fetchall()]
+    rows = []
+    for r in cursor.fetchall():
+        d = dict(r)
+        if mask_passwords:
+            d["password"] = "••••••••"
+        else:
+            d["password"] = decrypt_password(d.get("password", ""))
+        rows.append(d)
     conn.close()
     return rows
 
 
-def get_account(account_id: int) -> Optional[Dict[str, Any]]:
+def get_account(account_id: int, decrypt: bool = True) -> Optional[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM accounts WHERE id = ?", (account_id,))
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else None
+    if not row:
+        return None
+    d = dict(row)
+    if decrypt:
+        d["password"] = decrypt_password(d.get("password", ""))
+    return d
 
 
 def add_account(phone: str, password: str, label: str = "", max_tasks: int = 0, mode: str = "api", enabled: int = 1) -> Dict[str, Any]:
     clean_phone = normalize_phone(phone)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    enc_pwd = encrypt_password(password)
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO accounts (phone, password, label, max_tasks, mode, enabled, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (clean_phone, password, label or f"Account {clean_phone[-4:]}", max_tasks, mode, enabled, now))
+    """, (clean_phone, enc_pwd, label or f"Account {clean_phone[-4:]}", max_tasks, mode, enabled, now))
     new_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    return get_account(new_id)
+    return get_account(new_id, decrypt=False)
 
 
 def update_account(account_id: int, phone: Optional[str] = None, password: Optional[str] = None,
@@ -164,7 +230,7 @@ def update_account(account_id: int, phone: Optional[str] = None, password: Optio
         values.append(normalize_phone(phone))
     if password is not None and password.strip() != "":
         fields.append("password = ?")
-        values.append(password)
+        values.append(encrypt_password(password.strip()))
     if label is not None:
         fields.append("label = ?")
         values.append(label)
@@ -185,7 +251,7 @@ def update_account(account_id: int, phone: Optional[str] = None, password: Optio
         conn.commit()
 
     conn.close()
-    return get_account(account_id)
+    return get_account(account_id, decrypt=False)
 
 
 def delete_account(account_id: int) -> bool:
@@ -193,9 +259,38 @@ def delete_account(account_id: int) -> bool:
     cursor = conn.cursor()
     cursor.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
     deleted = cursor.rowcount > 0
+    cursor.execute("DELETE FROM run_history WHERE account_id = ?", (account_id,))
     conn.commit()
     conn.close()
     return deleted
+
+
+def record_run_history(account_id: int, phone: str, label: str, status: str, tasks_done: int = 0, earned: float = 0.0, balance: str = "0"):
+    """Store audit log entry of an automation execution (#2)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("""
+        INSERT INTO run_history (account_id, phone, label, run_time, status, tasks_done, earned, balance)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (account_id, phone, label, now, status, tasks_done, earned, str(balance)))
+    # Cap history at 500 records
+    cursor.execute("DELETE FROM run_history WHERE id NOT IN (SELECT id FROM run_history ORDER BY id DESC LIMIT 500)")
+    conn.commit()
+    conn.close()
+
+
+def get_run_history(account_id: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    """Retrieve run history for all accounts or a specific account (#2)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if account_id:
+        cursor.execute("SELECT * FROM run_history WHERE account_id = ? ORDER BY id DESC LIMIT ?", (account_id, limit))
+    else:
+        cursor.execute("SELECT * FROM run_history ORDER BY id DESC LIMIT ?", (limit,))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
 
 
 def update_account_stats(account_id: int, vip_level: Optional[str] = None, balance: Optional[str] = None,
@@ -217,6 +312,20 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
         WHERE id = ?
     """, (vip_level, balance, last_status, now, tasks_done, earned, tasks_done, earned, account_id))
     conn.commit()
+
+    # Fetch updated account details for run history
+    cursor.execute("SELECT phone, label, balance FROM accounts WHERE id = ?", (account_id,))
+    acc_row = cursor.fetchone()
+    if acc_row and last_status and last_status != "Running...":
+        record_run_history(
+            account_id=account_id,
+            phone=acc_row["phone"],
+            label=acc_row["label"] or acc_row["phone"],
+            status=last_status,
+            tasks_done=tasks_done,
+            earned=earned,
+            balance=balance or acc_row["balance"] or "0"
+        )
 
     if tasks_done > 0 or earned > 0:
         record_daily_earnings(tasks_done, earned)

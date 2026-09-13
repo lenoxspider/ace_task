@@ -158,23 +158,33 @@ class AceApiBot:
 
     def _post(self, path: str, json_data: Optional[dict] = None) -> dict:
         url = f"{self.base_url}{path}"
-        try:
-            resp = self.session.post(url, json=json_data or {}, timeout=15)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            logger.error(f"POST {path} failed: {e}")
-            return {}
+        for attempt in range(1, 4):
+            try:
+                resp = self.session.post(url, json=json_data or {}, timeout=15)
+                resp.raise_for_status()
+                return resp.json()
+            except Exception as e:
+                if attempt < 3:
+                    time.sleep(1.5 * attempt)
+                else:
+                    logger.error(f"POST {path} failed after 3 attempts: {e}")
+                    return {}
+        return {}
 
     def _get(self, path: str, params: Optional[dict] = None) -> dict:
         url = f"{self.base_url}{path}"
-        try:
-            resp = self.session.get(url, params=params or {}, timeout=15)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            logger.error(f"GET {path} failed: {e}")
-            return {}
+        for attempt in range(1, 4):
+            try:
+                resp = self.session.get(url, params=params or {}, timeout=15)
+                resp.raise_for_status()
+                return resp.json()
+            except Exception as e:
+                if attempt < 3:
+                    time.sleep(1.5 * attempt)
+                else:
+                    logger.error(f"GET {path} failed after 3 attempts: {e}")
+                    return {}
+        return {}
 
     def login(self) -> bool:
         logger.info(f"[API] Attempting login for phone: {self.phone}...")
@@ -233,16 +243,27 @@ class AceApiBot:
                         self.stats["checkin_status"] = "✅ Already signed in today"
                         return True
 
-        res = self._post("/api/Checkin/checkin", {"activity_id": activity_id})
-        if isinstance(res, dict) and res.get("code") == 1:
-            logger.info(f"[API] Daily check-in successful! Message: {res.get('msg', 'Success')}")
-            self.stats["checkin_status"] = "✅ Successfully signed in"
-            return True
-        else:
-            msg = res.get("msg", "No response")
-            logger.info(f"[API] Check-in result: {msg}")
-            self.stats["checkin_status"] = f"ℹ️ {msg}"
-            return False
+        # Check-in with auto-retry on transient errors (#8)
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            res = self._post("/api/Checkin/checkin", {"activity_id": activity_id})
+            if isinstance(res, dict) and res.get("code") == 1:
+                logger.info(f"[API] Daily check-in successful! Message: {res.get('msg', 'Success')}")
+                self.stats["checkin_status"] = "✅ Successfully signed in"
+                return True
+            msg = res.get("msg", "") if isinstance(res, dict) else ""
+            if "already" in msg.lower() or "已签到" in msg:
+                self.stats["checkin_status"] = "✅ Already signed in today"
+                return True
+            if attempt < max_retries:
+                wait = 2 ** attempt
+                logger.info(f"[API] Check-in attempt {attempt} failed ({msg}). Retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                logger.info(f"[API] Check-in result: {msg or 'Failed'}")
+                self.stats["checkin_status"] = f"ℹ️ {msg or 'Failed'}"
+                return False
+        return False
 
     def do_tasks(self, max_tasks: Optional[int] = None) -> bool:
         logger.info("[API] Fetching daily task list...")

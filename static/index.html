@@ -41,6 +41,9 @@
         <button id="btn-logout" class="btn btn-ghost" onclick="handleLogout()" title="Lock dashboard & log out">
           <span class="btn-icon">🔒</span> Lock
         </button>
+        <button id="btn-import-csv" class="btn btn-secondary" onclick="openImportModal()" title="Batch import accounts via CSV">
+          <span class="btn-icon">📥</span> Import CSV
+        </button>
         <button id="btn-add-account" class="btn btn-secondary" onclick="openAccountModal()">
           <span class="btn-icon">+</span> Add Account
         </button>
@@ -97,7 +100,12 @@
           <span class="badge badge-mode">GHS Performance</span>
         </div>
         <div class="panel-tools">
-          <span class="trend-subtitle">Daily profit and completed task volume</span>
+          <button class="btn btn-xs btn-ghost" onclick="openHistoryModal()" title="View full execution audit log">
+            <span class="btn-icon">📜</span> Audit Log
+          </button>
+          <a href="/api/export/csv" class="btn btn-xs btn-secondary" download="ace775_financial_report.csv" title="Download Excel/CSV Spreadsheet">
+            <span class="btn-icon">💾</span> Export CSV
+          </a>
         </div>
       </div>
       <div class="chart-container" id="chart-container">
@@ -274,6 +282,70 @@
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Close</button>
           <button type="submit" class="btn btn-primary">Save Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Run History & Audit Log (#2) -->
+  <div class="modal-overlay" id="history-modal">
+    <div class="modal-card modal-card-wide">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3 id="history-modal-title">Execution Audit History</h3>
+          <span class="badge badge-count" id="badge-history-count">0</span>
+        </div>
+        <button class="modal-close" onclick="closeHistoryModal()">&times;</button>
+      </div>
+      <div class="history-table-wrapper">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Account</th>
+              <th>Status</th>
+              <th>Tasks</th>
+              <th>Profit</th>
+              <th>Wallet Balance</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+            <tr><td colspan="6" class="table-empty">Loading history records...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeHistoryModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: CSV Account Import (#11) -->
+  <div class="modal-overlay" id="import-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Batch Account Import (CSV)</h3>
+        <button class="modal-close" onclick="closeImportModal()">&times;</button>
+      </div>
+      <form id="import-form" onsubmit="handleCsvImport(event)">
+        <p class="import-instructions">
+          Paste comma-separated rows below, or upload a <code>.csv</code> file.
+          <br><strong>Format:</strong> <code>phone,password,label,mode,max_tasks</code>
+          <br><small style="color:var(--text-dim)">(label, mode, max_tasks are optional)</small>
+        </p>
+        <div class="form-group" style="margin-top:12px;">
+          <input type="file" id="csv-file-input" accept=".csv,.txt" onchange="handleCsvFileUpload(event)">
+        </div>
+        <div class="form-group">
+          <label for="csv-textarea">CSV Content</label>
+          <textarea id="csv-textarea" rows="6" class="code-textarea" placeholder="509295199,secretpass,Account 1,api,0&#10;501234567,otherpass,User 2,api,0" required></textarea>
+        </div>
+        <div id="import-status-banner" class="verify-status-banner" style="display:none;"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-import">
+            <span class="btn-icon">⚡</span> Verify & Import All
+          </button>
         </div>
       </form>
     </div>

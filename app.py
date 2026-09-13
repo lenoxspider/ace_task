@@ -29,27 +29,38 @@ logger = logging.getLogger("AceApp")
 
 app = FastAPI(title="Ace775 Web Dashboard", version="1.2.0")
 
+import io
+import csv
+
 # Mount static folder
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# Dashboard Master Session Authentication
+# Dashboard Master Session Authentication (#14: 2-Hour Inactivity Timeout)
 ACTIVE_SESSIONS: set = set()
+SESSION_LAST_ACTIVE: Dict[str, float] = {}
+SESSION_TIMEOUT_SECONDS = 7200  # 2 hours
 COOKIE_NAME = "ace_session"
 
 
 def is_authenticated(request: Request) -> bool:
     token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+        elif request.headers.get("X-Session-Token"):
+            token = request.headers.get("X-Session-Token", "").strip()
+
     if token and token in ACTIVE_SESSIONS:
-        return True
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        header_token = auth_header[7:].strip()
-        if header_token and header_token in ACTIVE_SESSIONS:
-            return True
-    alt_header = request.headers.get("X-Session-Token", "").strip()
-    if alt_header and alt_header in ACTIVE_SESSIONS:
+        now = time.time()
+        last_active = SESSION_LAST_ACTIVE.get(token, now)
+        if now - last_active > SESSION_TIMEOUT_SECONDS:
+            ACTIVE_SESSIONS.discard(token)
+            SESSION_LAST_ACTIVE.pop(token, None)
+            return False
+        SESSION_LAST_ACTIVE[token] = now
         return True
     return False
 
@@ -258,6 +269,10 @@ class AccountVerifyRequest(BaseModel):
     password: str
 
 
+class CsvImportRequest(BaseModel):
+    csv_text: str
+
+
 
 # ==============================================================================
 # Authentication & View Routes
@@ -289,6 +304,7 @@ def login_api(item: LoginRequest):
 
     token = secrets.token_hex(24)
     ACTIVE_SESSIONS.add(token)
+    SESSION_LAST_ACTIVE[token] = time.time()
 
     response = JSONResponse(content={"success": True, "token": token})
     response.set_cookie(
@@ -305,8 +321,9 @@ def login_api(item: LoginRequest):
 @app.post("/api/auth/logout")
 def logout_api(request: Request):
     token = request.cookies.get(COOKIE_NAME)
-    if token and token in ACTIVE_SESSIONS:
-        ACTIVE_SESSIONS.remove(token)
+    if token:
+        ACTIVE_SESSIONS.discard(token)
+        SESSION_LAST_ACTIVE.pop(token, None)
     response = JSONResponse(content={"success": True})
     response.delete_cookie(key=COOKIE_NAME, path="/")
     return response
@@ -427,6 +444,127 @@ def update_account_api(account_id: int, item: AccountUpdate):
 
 
 
+@app.post("/api/accounts/{account_id}/refresh-balance")
+def refresh_account_balance_api(account_id: int):
+    account = db.get_account(account_id, decrypt=True)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    base_url = db.get_setting("base_url", "https://ace775.com")
+    bot = AceApiBot(base_url=base_url, phone=account["phone"], password=account["password"])
+    if not bot.login():
+        err = bot.stats.get("error", "Login failed. Could not refresh balance.")
+        if err.startswith("Login failed: "):
+            err = err[14:]
+        raise HTTPException(status_code=400, detail=f"Refresh failed: {err}")
+
+    vip = bot.stats.get("grade", account.get("vip_level", "VIP"))
+    try:
+        bal = float(bot.stats.get("balance", account.get("balance", 0.0)))
+    except (ValueError, TypeError):
+        bal = account.get("balance", 0.0)
+
+    db.update_account_stats(account_id, vip_level=vip, balance=bal, last_status="Balance Refreshed")
+    broadcast_log(f"🔄 Refreshed '{account.get('label') or account['phone']}': VIP {vip} | Balance {bal} GHS", "info")
+    return db.get_account(account_id, decrypt=False)
+
+
+@app.post("/api/accounts/import-csv")
+def import_accounts_csv_api(item: CsvImportRequest):
+    lines = item.csv_text.strip().splitlines()
+    if not lines:
+        raise HTTPException(status_code=400, detail="CSV is empty")
+
+    base_url = db.get_setting("base_url", "https://ace775.com")
+    imported = 0
+    errors = []
+
+    for line_idx, raw_line in enumerate(lines, 1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 2:
+            errors.append(f"Line {line_idx}: Missing phone or password")
+            continue
+
+        raw_phone, raw_pwd = parts[0], parts[1]
+        if raw_phone.lower() in ["phone", "phonenumber", "phone_number", "mobile", "account"] or raw_pwd.lower() in ["password", "pwd", "pass"]:
+            continue
+        label = parts[2] if len(parts) > 2 else ""
+        mode = parts[3] if len(parts) > 3 and parts[3] in ["api", "browser"] else "api"
+        max_tasks = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0
+
+        clean_phone = db.normalize_phone(raw_phone)
+        if not clean_phone or not raw_pwd:
+            errors.append(f"Line {line_idx}: Invalid phone or password")
+            continue
+
+        bot = AceApiBot(base_url=base_url, phone=clean_phone, password=raw_pwd)
+        if not bot.login():
+            err = bot.stats.get("error", "Login failed")
+            if err.startswith("Login failed: "):
+                err = err[14:]
+            errors.append(f"Line {line_idx} ({raw_phone}): {err}")
+            continue
+
+        try:
+            vip = bot.stats.get("grade", "VIP")
+            try:
+                bal = float(bot.stats.get("balance", 0.0))
+            except (ValueError, TypeError):
+                bal = 0.0
+            acc = db.add_account(phone=clean_phone, password=raw_pwd, label=label, mode=mode, max_tasks=max_tasks)
+            db.update_account_stats(acc["id"], vip_level=vip, balance=bal, last_status="Verified")
+            imported += 1
+        except Exception as e:
+            errors.append(f"Line {line_idx} ({raw_phone}): {str(e)}")
+
+    broadcast_log(f"📥 Batch CSV Import: {imported} account(s) added, {len(errors)} error(s).", "success" if imported > 0 else "warning")
+    return {"imported": imported, "errors": errors}
+
+
+@app.get("/api/history")
+def get_run_history_api(account_id: Optional[int] = None, limit: int = 50):
+    return db.get_run_history(account_id=account_id, limit=limit)
+
+
+@app.get("/api/export/csv")
+def export_csv_report():
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(["=== ACE775 7-DAY EARNINGS & TASKS REPORT ==="])
+    writer.writerow(["Date", "Tasks Completed", "Earned (GHS)"])
+    for r in db.get_last_7_days_analytics():
+        writer.writerow([r["date"], r["tasks"], r["earned"]])
+    writer.writerow([])
+
+    writer.writerow(["=== ACCOUNTS OVERVIEW & LIFETIME METRICS ==="])
+    writer.writerow(["ID", "Phone", "Label", "Mode", "VIP Level", "Balance (GHS)", "Today Tasks", "Today Earned (GHS)", "Lifetime Tasks", "Lifetime Earned (GHS)", "Last Status"])
+    for a in db.get_accounts(mask_passwords=True):
+        writer.writerow([
+            a["id"], a["phone"], a.get("label", ""), a.get("mode", "api"),
+            a.get("vip_level", "N/A"), a.get("balance", "0"),
+            a.get("tasks_done_today", 0), a.get("earned_today", 0.0),
+            a.get("total_tasks_done", 0), a.get("total_earned_ghs", 0.0),
+            a.get("last_status", "")
+        ])
+    writer.writerow([])
+
+    writer.writerow(["=== RECENT EXECUTION AUDIT LOG ==="])
+    writer.writerow(["Run Time", "Account Label", "Phone", "Status", "Tasks Completed", "Earned (GHS)", "Balance (GHS)"])
+    for h in db.get_run_history(limit=150):
+        writer.writerow([h.get("run_time"), h.get("label"), h.get("phone"), h.get("status"), h.get("tasks_done"), h.get("earned"), h.get("balance")])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=ace775_financial_report.csv"}
+    )
+
+
 @app.delete("/api/accounts/{account_id}")
 def delete_account_api(account_id: int):
     ok = db.delete_account(account_id)
@@ -536,6 +674,20 @@ def update_settings_api(data: SettingsUpdate):
         db.set_setting("auto_retry_outside_hours", data.auto_retry_outside_hours.strip())
     if data.retry_interval_minutes is not None:
         db.set_setting("retry_interval_minutes", data.retry_interval_minutes.strip())
+
+    # Dynamically reload Telegram Listener (#3)
+    if data.telegram_token is not None or data.telegram_chat_id is not None:
+        try:
+            telegram_bot.stop()
+            telegram_bot.bot_token = db.get_setting("telegram_token", "")
+            telegram_bot.authorized_chat_id = db.get_setting("telegram_chat_id", "")
+            if telegram_bot.is_configured:
+                telegram_bot.start()
+                broadcast_log("📱 Telegram Listener reloaded live with new credentials.", "success")
+            else:
+                broadcast_log("📱 Telegram Listener stopped (credentials cleared).", "info")
+        except Exception as e:
+            logger.warning(f"Error reloading Telegram bot: {e}")
 
     broadcast_log("Settings and Auto-Scheduler updated.", "info")
     return {"status": "saved"}

@@ -130,6 +130,13 @@ echo "     Stop         : sudo systemctl stop ace775"
 echo ""
 echo "🤖 Two-Way Telegram Control:"
 echo "     Send /status, /balance, or /run directly to your bot anytime!"
+echo ""
+echo "🔒 Optional: Setup Nginx Reverse Proxy & SSL / HTTPS (#15):"
+echo "     Template ready at: nginx_ace775.conf"
+echo "     sudo cp nginx_ace775.conf /etc/nginx/sites-available/ace775"
+echo "     sudo ln -sf /etc/nginx/sites-available/ace775 /etc/nginx/sites-enabled/"
+echo "     sudo nginx -t && sudo systemctl reload nginx"
+echo "     sudo certbot --nginx -d yourdomain.com"
 echo "=================================================="
 
 
