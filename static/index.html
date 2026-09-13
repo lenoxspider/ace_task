@@ -359,11 +359,96 @@
             <div>
               <strong style="color:#ffffff;">Ace775 Platform Withdrawal Window: 09:00 – 17:00 Daily</strong>
               <p style="font-size:0.8rem; color:var(--text-muted);">
-                You can withdraw once per calendar day to your bound Mobile Money (MoMo) account. Auto-withdrawals run automatically after tasks complete when enabled.
+                You can withdraw once per calendar day to your bound Mobile Money (MoMo) account. Auto-withdrawals run automatically after tasks complete when enabled. Ace775 only accepts fixed denominations.
               </p>
             </div>
           </div>
         </div>
+
+        <!-- Dedicated Auto-Withdrawal Rule Configurator Card -->
+        <section class="content-panel" id="card-auto-withdraw-setup" style="border-left: 3px solid var(--accent-cyan);">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2>⚙️ Auto-Withdrawal Rule Configurator</h2>
+              <span class="badge" style="background:rgba(6,182,212,0.15); color:var(--accent-cyan); font-weight:600;">Fixed Amounts Only</span>
+            </div>
+          </div>
+          <form id="paged-auto-withdraw-form" onsubmit="handlePagedAutoWithdrawSubmit(event)" style="padding:16px 20px;">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="withdraw-page-acc-select">Target Account</label>
+                <select id="withdraw-page-acc-select" onchange="onWithdrawPageAccountChange()" required>
+                  <option value="">-- Choose Account to Configure --</option>
+                </select>
+                <span class="form-hint" id="withdraw-page-acc-hint">Select an account to load or update its auto-withdrawal rule.</span>
+              </div>
+              <div class="form-group flex-1">
+                <label for="withdraw-page-wallet">Payout Wallet</label>
+                <select id="withdraw-page-wallet">
+                  <option value="2">Income / Commission Wallet (Default)</option>
+                  <option value="1">Personal Wallet</option>
+                </select>
+                <span class="form-hint">Income wallet holds your daily task commissions.</span>
+              </div>
+            </div>
+
+            <div class="form-group checkbox-group" style="margin-top:12px;">
+              <label class="checkbox-label">
+                <input type="checkbox" id="withdraw-page-auto-toggle"> Enable Automatic Daily Withdrawal
+              </label>
+              <span class="form-hint">When enabled, the bot will auto-request a payout after tasks finish if operating hours (09:00 - 17:00) are open.</span>
+            </div>
+
+            <!-- Fixed Amount Options Selector (Dropdown + Quick Buttons) -->
+            <div class="form-group" style="margin-top:12px;">
+              <label for="withdraw-page-fixed-amount">Select Fixed Auto-Payout Amount (GHS)</label>
+              <select id="withdraw-page-fixed-amount" onchange="syncWithdrawPagePills(this.value)">
+                <option value="0">Full Balance / Auto-Max Allowed (Default)</option>
+                <option value="20">20 GHS</option>
+                <option value="50">50 GHS</option>
+                <option value="100">100 GHS</option>
+                <option value="200">200 GHS</option>
+                <option value="300">300 GHS</option>
+                <option value="500">500 GHS</option>
+                <option value="1000">1,000 GHS</option>
+                <option value="2000">2,000 GHS</option>
+                <option value="3000">3,000 GHS</option>
+                <option value="5000">5,000 GHS</option>
+              </select>
+
+              <div class="quick-amounts-grid" id="withdraw-page-pills-grid">
+                <button type="button" class="amount-pill active" onclick="selectWithdrawPageAmount(0)">Full Bal</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(20)">20</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(50)">50</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(100)">100</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(200)">200</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(300)">300</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(500)">500</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(1000)">1000</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(2000)">2000</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(3000)">3000</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(5000)">5000</button>
+              </div>
+              <span class="form-hint">Ace775 requires fixed amounts only. Tap any denomination button or select from the dropdown.</span>
+            </div>
+
+            <div class="form-row" style="margin-top:12px;">
+              <div class="form-group flex-1">
+                <label for="withdraw-page-pin">Transaction PIN / Payment Password</label>
+                <input type="password" id="withdraw-page-pin" placeholder="Enter 6-digit payment PIN" autocomplete="off">
+                <span class="form-hint">Stored encrypted. Required by Ace775 to verify payouts to your MoMo.</span>
+              </div>
+            </div>
+
+            <div id="withdraw-page-status-banner" class="verify-status-banner" style="display:none; margin-top:12px;"></div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+              <button type="submit" class="btn btn-primary" id="btn-save-paged-withdraw">
+                <span class="btn-icon">💾</span> Save Auto-Withdrawal Rule
+              </button>
+            </div>
+          </form>
+        </section>
 
         <!-- Accounts Auto-Withdrawal Status Table -->
         <section class="content-panel">
@@ -387,10 +472,11 @@
                   <th>Target Amount</th>
                   <th>Last Withdraw Date</th>
                   <th>Last Payout Status</th>
+                  <th style="text-align:right;">Actions</th>
                 </tr>
               </thead>
               <tbody id="withdrawals-table-body">
-                <tr><td colspan="6" class="table-empty">Loading accounts payout data...</td></tr>
+                <tr><td colspan="7" class="table-empty">Loading accounts payout data...</td></tr>
               </tbody>
             </table>
           </div>
@@ -534,8 +620,34 @@
         <div id="auto-withdraw-fields" style="display:none;">
           <div class="form-row">
             <div class="form-group flex-1">
-              <label for="form-withdraw-amount">Target Amount (GHS)</label>
-              <input type="number" id="form-withdraw-amount" step="0.5" min="0" value="0" placeholder="0 = Full balance">
+              <label for="form-withdraw-amount">Fixed Auto-Payout Amount (GHS)</label>
+              <select id="form-withdraw-amount" onchange="syncFormWithdrawPills(this.value)">
+                <option value="0">Full Balance / Auto (Default)</option>
+                <option value="20">20 GHS</option>
+                <option value="50">50 GHS</option>
+                <option value="100">100 GHS</option>
+                <option value="200">200 GHS</option>
+                <option value="300">300 GHS</option>
+                <option value="500">500 GHS</option>
+                <option value="1000">1,000 GHS</option>
+                <option value="2000">2,000 GHS</option>
+                <option value="3000">3,000 GHS</option>
+                <option value="5000">5,000 GHS</option>
+              </select>
+              <div class="quick-amounts-grid" id="form-withdraw-pills-grid">
+                <button type="button" class="amount-pill active" onclick="selectFormWithdrawAmount(0)">Full Bal</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(20)">20</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(50)">50</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(100)">100</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(200)">200</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(300)">300</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(500)">500</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(1000)">1000</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(2000)">2000</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(3000)">3000</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(5000)">5000</button>
+              </div>
+              <span class="form-hint">Ace775 platform only processes fixed denominations. Tap to select.</span>
             </div>
             <div class="form-group flex-1">
               <label for="form-withdraw-wallet">Wallet Source</label>
@@ -656,8 +768,32 @@
         </div>
 
         <div class="form-group">
-          <label for="withdraw-modal-amount">Withdrawal Amount (GHS)</label>
-          <input type="number" id="withdraw-modal-amount" step="0.5" min="1" required placeholder="Enter amount to withdraw">
+          <label for="withdraw-modal-amount">Select Allowed Fixed Amount (GHS)</label>
+          <select id="withdraw-modal-amount" onchange="syncWithdrawPills(this.value)">
+            <option value="20">20 GHS</option>
+            <option value="50" selected>50 GHS</option>
+            <option value="100">100 GHS</option>
+            <option value="200">200 GHS</option>
+            <option value="300">300 GHS</option>
+            <option value="500">500 GHS</option>
+            <option value="1000">1,000 GHS</option>
+            <option value="2000">2,000 GHS</option>
+            <option value="3000">3,000 GHS</option>
+            <option value="5000">5,000 GHS</option>
+          </select>
+          <div class="quick-amounts-grid" id="withdraw-pills-grid">
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(20)">20</button>
+            <button type="button" class="amount-pill active" onclick="selectWithdrawAmount(50)">50</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(100)">100</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(200)">200</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(300)">300</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(500)">500</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(1000)">1000</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(2000)">2000</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(3000)">3000</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(5000)">5000</button>
+          </div>
+          <span class="form-hint">Tap any denomination to select. Ace775 rejects custom amounts.</span>
         </div>
 
         <div class="form-group">

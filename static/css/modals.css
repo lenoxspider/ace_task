@@ -255,3 +255,39 @@ form {
   justify-content: space-between;
   align-items: center;
 }
+
+/* Quick Amount Selection Grid */
+.quick-amounts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.amount-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-xs);
+  padding: 8px 4px;
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  text-align: center;
+  transition: var(--transition-fast);
+  user-select: none;
+}
+
+.amount-pill:hover {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: rgba(6, 182, 212, 0.45);
+  color: #ffffff;
+}
+
+.amount-pill.active {
+  background: rgba(6, 182, 212, 0.25);
+  border-color: var(--accent-cyan);
+  color: #22d3ee;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.35);
+}

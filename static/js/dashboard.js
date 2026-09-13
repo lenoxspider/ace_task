@@ -33,6 +33,15 @@ import {
   openWithdrawModal,
   closeWithdrawModal,
   handleManualWithdrawSubmit,
+  selectWithdrawAmount,
+  syncWithdrawPills,
+  selectFormWithdrawAmount,
+  syncFormWithdrawPills,
+  selectWithdrawPageAmount,
+  syncWithdrawPagePills,
+  onWithdrawPageAccountChange,
+  configureAutoWithdrawForAccount,
+  handlePagedAutoWithdrawSubmit,
   openHistoryModal,
   closeHistoryModal,
   loadAuditHistoryTable,
@@ -70,6 +79,17 @@ window.closeAccountModal = closeAccountModal;
 window.toggleAutoWithdrawFields = toggleAutoWithdrawFields;
 window.testAccountLogins = testAccountLogins;
 window.handleAccountSubmit = handleAccountSubmit;
+
+// Withdrawal Fixed Amount Selection & Operations
+window.selectWithdrawAmount = selectWithdrawAmount;
+window.syncWithdrawPills = syncWithdrawPills;
+window.selectFormWithdrawAmount = selectFormWithdrawAmount;
+window.syncFormWithdrawPills = syncFormWithdrawPills;
+window.selectWithdrawPageAmount = selectWithdrawPageAmount;
+window.syncWithdrawPagePills = syncWithdrawPagePills;
+window.onWithdrawPageAccountChange = onWithdrawPageAccountChange;
+window.configureAutoWithdrawForAccount = configureAutoWithdrawForAccount;
+window.handlePagedAutoWithdrawSubmit = handlePagedAutoWithdrawSubmit;
 
 window.openWithdrawModal = openWithdrawModal;
 window.closeWithdrawModal = closeWithdrawModal;

@@ -25,7 +25,9 @@ export function openAccountModal(acc = null) {
   // Auto-Withdrawal fields
   const autoW = acc ? Boolean(acc.auto_withdraw) : false;
   document.getElementById("form-auto-withdraw").checked = autoW;
-  document.getElementById("form-withdraw-amount").value = acc ? (acc.withdraw_amount || 0) : 0;
+  const wAmt = acc ? (acc.withdraw_amount || 0) : 0;
+  document.getElementById("form-withdraw-amount").value = String(wAmt);
+  syncFormWithdrawPills(wAmt);
   document.getElementById("form-withdraw-wallet").value = acc ? (acc.withdraw_wallet || 2) : 2;
   document.getElementById("form-pay-password").value = "";
   document.getElementById("form-pay-password").placeholder = acc && acc.pay_password ? "•••••• (Leave blank to keep current)" : "6-digit payment password (optional)";
@@ -170,16 +172,107 @@ export async function handleAccountSubmit(e) {
 }
 
 /* ==============================================================================
-   2. Manual Withdrawal Modal
+   2. Fixed Amount Denominations & Selection Helpers
    ============================================================================== */
-export function openWithdrawModal(accountId) {
-  const acc = getAccountById(accountId);
-  if (!acc) return;
+export function selectWithdrawAmount(amount) {
+  const select = document.getElementById("withdraw-modal-amount");
+  if (select) {
+    select.value = String(amount);
+  }
+  syncWithdrawPills(amount);
+}
+
+export function syncWithdrawPills(amount) {
+  const grid = document.getElementById("withdraw-pills-grid");
+  if (!grid) return;
+  const pills = grid.querySelectorAll(".amount-pill");
+  pills.forEach(pill => {
+    const val = pill.innerText.trim();
+    if (String(val) === String(amount)) {
+      pill.classList.add("active");
+    } else {
+      pill.classList.remove("active");
+    }
+  });
+}
+
+export function selectFormWithdrawAmount(amount) {
+  const select = document.getElementById("form-withdraw-amount");
+  if (select) {
+    select.value = String(amount);
+  }
+  syncFormWithdrawPills(amount);
+}
+
+export function syncFormWithdrawPills(amount) {
+  const grid = document.getElementById("form-withdraw-pills-grid");
+  if (!grid) return;
+  const pills = grid.querySelectorAll(".amount-pill");
+  pills.forEach(pill => {
+    const val = pill.innerText.trim();
+    if ((Number(amount) === 0 && val === "Full Bal") || String(val) === String(amount)) {
+      pill.classList.add("active");
+    } else {
+      pill.classList.remove("active");
+    }
+  });
+}
+
+export function selectWithdrawPageAmount(amount) {
+  const select = document.getElementById("withdraw-page-fixed-amount");
+  if (select) {
+    select.value = String(amount);
+  }
+  syncWithdrawPagePills(amount);
+}
+
+export function syncWithdrawPagePills(amount) {
+  const grid = document.getElementById("withdraw-page-pills-grid");
+  if (!grid) return;
+  const pills = grid.querySelectorAll(".amount-pill");
+  pills.forEach(pill => {
+    const val = pill.innerText.trim();
+    if ((Number(amount) === 0 && val === "Full Bal") || String(val) === String(amount)) {
+      pill.classList.add("active");
+    } else {
+      pill.classList.remove("active");
+    }
+  });
+}
+
+/* ==============================================================================
+   3. Manual Withdrawal Modal
+   ============================================================================== */
+export function openWithdrawModal(accountId = null) {
+  if (!accountId && state.accounts && state.accounts.length > 0) {
+    accountId = state.accounts[0].id;
+  }
+  const acc = accountId ? getAccountById(accountId) : null;
+  if (!acc) {
+    alert("Please select or add an account first before requesting a withdrawal.");
+    return;
+  }
 
   document.getElementById("withdraw-acc-id").value = acc.id;
   document.getElementById("withdraw-account-label").innerText = `${acc.label || 'Account'} (+233 ${acc.phone})`;
   document.getElementById("withdraw-account-balance").innerText = `${acc.balance || '0.00'} GHS`;
-  document.getElementById("withdraw-modal-amount").value = acc.balance || "";
+
+  // Select best matching fixed denomination
+  const bal = parseFloat(acc.balance || 0);
+  const fixedDenominations = [20, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000];
+  let defaultAmount = 50;
+  for (let i = fixedDenominations.length - 1; i >= 0; i--) {
+    if (bal >= fixedDenominations[i]) {
+      defaultAmount = fixedDenominations[i];
+      break;
+    }
+  }
+
+  const amountSelect = document.getElementById("withdraw-modal-amount");
+  if (amountSelect) {
+    amountSelect.value = String(defaultAmount);
+  }
+  syncWithdrawPills(defaultAmount);
   document.getElementById("withdraw-modal-pin").value = "";
 
   const statusBox = document.getElementById("withdraw-status-banner");
@@ -325,35 +418,159 @@ export async function loadAuditHistoryTable(accountId = null) {
 }
 
 export function loadWithdrawalsView() {
-  const select = document.getElementById("paged-withdraw-acc-id");
   const accs = state.accounts || [];
-  if (select) {
-    select.innerHTML = `<option value="">-- Select Account --</option>` + accs.map(a => `
-      <option value="${a.id}" data-balance="${a.balance || 0}">${escapeHtml(a.label || a.phone)} (${a.balance || 0} GHS)</option>
+
+  // Populate account dropdown in Auto-Withdrawal Configurator Card
+  const accSelect = document.getElementById("withdraw-page-acc-select");
+  if (accSelect) {
+    const currentVal = accSelect.value;
+    accSelect.innerHTML = `<option value="">-- Choose Account to Configure --</option>` + accs.map(a => `
+      <option value="${a.id}">${escapeHtml(a.label || a.phone)} (${a.balance || '0.00'} GHS)</option>
     `).join("");
+
+    if (currentVal && accs.some(a => String(a.id) === String(currentVal))) {
+      accSelect.value = currentVal;
+    } else if (accs.length > 0) {
+      accSelect.value = String(accs[0].id);
+      onWithdrawPageAccountChange();
+    }
   }
 
+  // Populate withdrawals table
   const tbody = document.getElementById("withdrawals-table-body");
   if (tbody) {
     if (accs.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No accounts available.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No accounts available. Add an account to get started.</td></tr>`;
       return;
     }
     const todayStr = new Date().toISOString().split('T')[0];
     tbody.innerHTML = accs.map(a => `
       <tr>
         <td><strong>${escapeHtml(a.label || a.phone)}</strong><br><small style="color:var(--text-dim)">+233 ${escapeHtml(a.phone)}</small></td>
-        <td><strong style="color:var(--accent-cyan);">${a.balance || '0.00'} GHS</strong></td>
+        <td><strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${a.balance || '0.00'} GHS</strong></td>
         <td>
           <span class="badge ${a.auto_withdraw === 1 ? 'badge-active' : 'badge-paused'}">
             ${a.auto_withdraw === 1 ? 'ENABLED' : 'DISABLED'}
           </span>
         </td>
-        <td>${a.withdraw_amount > 0 ? a.withdraw_amount + ' GHS' : 'Full Bal'}</td>
-        <td>${a.last_withdraw_date ? escapeHtml(a.last_withdraw_date) : '<span style="color:var(--text-dim)">None</span>'}</td>
+        <td><span class="badge" style="background:rgba(255,255,255,0.06); font-family:var(--font-mono);">${a.withdraw_amount > 0 ? a.withdraw_amount + ' GHS' : 'Full Bal'}</span></td>
+        <td style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-dim);">${a.last_withdraw_date ? escapeHtml(a.last_withdraw_date) : 'None'}</td>
         <td><span style="font-size:0.8rem; color:${a.last_withdraw_date === todayStr ? 'var(--success)' : 'var(--text-dim)'}">${escapeHtml(a.last_withdraw_status || 'Ready')}</span></td>
+        <td style="text-align:right; white-space:nowrap;">
+          <button class="btn btn-xs btn-secondary" onclick="configureAutoWithdrawForAccount(${a.id})" title="Configure Auto-Withdrawal">
+            ⚙️ Setup
+          </button>
+          <button class="btn btn-xs btn-primary" onclick="openWithdrawModal(${a.id})" title="Request Instant Withdrawal">
+            💸 Withdraw
+          </button>
+        </td>
       </tr>
     `).join("");
+  }
+}
+
+export function onWithdrawPageAccountChange() {
+  const accSelect = document.getElementById("withdraw-page-acc-select");
+  if (!accSelect) return;
+  const accId = accSelect.value;
+  const hint = document.getElementById("withdraw-page-acc-hint");
+
+  if (!accId) {
+    if (hint) hint.innerText = "Select an account to load or update its auto-withdrawal rule.";
+    return;
+  }
+  const acc = getAccountById(accId);
+  if (!acc) return;
+
+  if (hint) {
+    hint.innerHTML = `VIP Level: <strong>${escapeHtml(acc.vip_level || 'VIP')}</strong> | Balance: <strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${acc.balance || '0.00'} GHS</strong>`;
+  }
+  document.getElementById("withdraw-page-auto-toggle").checked = (acc.auto_withdraw === 1);
+  const targetAmount = acc.withdraw_amount || 0;
+  document.getElementById("withdraw-page-fixed-amount").value = String(targetAmount);
+  syncWithdrawPagePills(targetAmount);
+  document.getElementById("withdraw-page-wallet").value = String(acc.withdraw_wallet || 2);
+  const pinInput = document.getElementById("withdraw-page-pin");
+  if (pinInput) {
+    pinInput.value = "";
+    pinInput.placeholder = acc.pay_password ? "•••••• (PIN already configured)" : "Enter 6-digit payment PIN";
+  }
+
+  const banner = document.getElementById("withdraw-page-status-banner");
+  if (banner) {
+    banner.style.display = "none";
+    banner.className = "verify-status-banner";
+    banner.innerHTML = "";
+  }
+}
+
+export function configureAutoWithdrawForAccount(accountId) {
+  const select = document.getElementById("withdraw-page-acc-select");
+  if (select) {
+    select.value = String(accountId);
+    onWithdrawPageAccountChange();
+  }
+  const card = document.getElementById("card-auto-withdraw-setup");
+  if (card) {
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+export async function handlePagedAutoWithdrawSubmit(e) {
+  e.preventDefault();
+  const accSelect = document.getElementById("withdraw-page-acc-select");
+  const accId = accSelect ? accSelect.value : null;
+  const banner = document.getElementById("withdraw-page-status-banner");
+  const btn = document.getElementById("btn-save-paged-withdraw");
+
+  if (!accId) {
+    if (banner) {
+      banner.style.display = "flex";
+      banner.className = "verify-status-banner verify-error";
+      banner.innerHTML = "⚠️ Please select an account first.";
+    }
+    return;
+  }
+
+  const enabled = document.getElementById("withdraw-page-auto-toggle").checked ? 1 : 0;
+  const amount = parseFloat(document.getElementById("withdraw-page-fixed-amount").value) || 0.0;
+  const wallet = parseInt(document.getElementById("withdraw-page-wallet").value, 10) || 2;
+  const pin = document.getElementById("withdraw-page-pin").value.trim();
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-icon">⏳</span> Saving Rule...';
+  if (banner) {
+    banner.style.display = "flex";
+    banner.className = "verify-status-banner verify-loading";
+    banner.innerHTML = "⏳ Updating auto-withdrawal configuration...";
+  }
+
+  const payload = {
+    auto_withdraw: enabled,
+    withdraw_amount: amount,
+    withdraw_wallet: wallet
+  };
+  if (pin) {
+    payload.pay_password = pin;
+  }
+
+  try {
+    await api.saveAccount(accId, payload);
+    if (banner) {
+      banner.className = "verify-status-banner verify-success";
+      banner.innerHTML = `✅ <strong>Auto-Withdrawal Rule Saved!</strong> Fixed target: <strong>${amount > 0 ? amount + ' GHS' : 'Full Balance'}</strong> (${enabled ? 'ENABLED' : 'DISABLED'}).`;
+    }
+    appendTerminalLog(`⚙️ [WITHDRAW] Auto-withdrawal rule configured for account #${accId}: ${amount > 0 ? amount + ' GHS' : 'Full Balance'} (${enabled ? 'ACTIVE' : 'INACTIVE'})`, "success");
+    await loadAccounts();
+    loadWithdrawalsView();
+  } catch (err) {
+    if (banner) {
+      banner.className = "verify-status-banner verify-error";
+      banner.innerHTML = `❌ <strong>Save Failed:</strong> ${escapeHtml(err.message)}`;
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span class="btn-icon">💾</span> Save Auto-Withdrawal Rule';
   }
 }
 
