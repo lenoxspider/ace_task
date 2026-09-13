@@ -11,9 +11,9 @@ echo "      Ace775 VPS Setup & Web Dashboard Installer  "
 echo "=================================================="
 
 # 1. Update package list & install system dependencies
-echo "[1/4] Installing system dependencies (Python3, venv, curl, system libraries)..."
+echo "[1/4] Installing system dependencies (Python3, venv, curl, git, sqlite3)..."
 sudo apt-get update -y
-sudo apt-get install -y python3 python3-pip python3-venv curl libglib2.0-0 libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2
+sudo apt-get install -y python3 python3-pip python3-venv curl git sqlite3
 
 # 2. Create Python virtual environment
 echo "[2/4] Setting up Python virtual environment..."
