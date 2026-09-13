@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unlock Ace775 Command Center</title>
+  <meta name="description" content="Secure login for Ace775 Automation Control Center">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 16px;
+      background-color: var(--bg-color);
+      background-image: 
+        radial-gradient(at 20% 20%, rgba(79, 70, 229, 0.18) 0px, transparent 50%),
+        radial-gradient(at 80% 80%, rgba(6, 182, 212, 0.14) 0px, transparent 50%);
+    }
+
+    .login-container {
+      width: 100%;
+      max-width: 420px;
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    .login-card {
+      background: rgba(13, 19, 34, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-lg);
+      padding: 36px 32px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75), 0 0 30px rgba(79, 70, 229, 0.15);
+      text-align: center;
+    }
+
+    .login-brand-icon {
+      width: 60px;
+      height: 60px;
+      margin: 0 auto 20px;
+      border-radius: 16px;
+      background: var(--primary-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      box-shadow: 0 0 25px var(--primary-glow);
+      animation: pulse 3s infinite;
+    }
+
+    .login-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .login-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 28px;
+    }
+
+    .password-wrapper {
+      position: relative;
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .password-input-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .password-input-box input {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-sm);
+      padding: 12px 42px 12px 14px;
+      color: #fff;
+      font-size: 1rem;
+      font-family: inherit;
+      outline: none;
+      transition: var(--transition);
+    }
+
+    .password-input-box input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
+    .btn-toggle-eye {
+      position: absolute;
+      right: 12px;
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: var(--transition);
+    }
+
+    .btn-toggle-eye:hover {
+      color: #fff;
+    }
+
+    .btn-unlock {
+      width: 100%;
+      padding: 12px 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      background: var(--primary-gradient);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 4px 16px var(--primary-glow);
+      transition: var(--transition);
+    }
+
+    .btn-unlock:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(79, 70, 229, 0.5);
+    }
+
+    .btn-unlock:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .login-error {
+      margin-top: 16px;
+      padding: 10px 14px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: var(--radius-sm);
+      color: #fca5a5;
+      font-size: 0.82rem;
+      display: none;
+    }
+
+    .shake {
+      animation: shake 0.4s ease-in-out;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-footer {
+      margin-top: 24px;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card" id="login-card">
+      <div class="login-brand-icon">⚡</div>
+      <h1 class="login-title">Ace775 Command Center</h1>
+      <p class="login-subtitle">Enter Master Password to unlock automation controls</p>
+
+      <form id="login-form" onsubmit="handleLogin(event)">
+        <div class="password-wrapper">
+          <div class="password-input-box">
+            <input 
+              type="password" 
+              id="dash-password" 
+              placeholder="Master Password" 
+              required 
+              autofocus 
+              autocomplete="current-password"
+            >
+            <button type="button" class="btn-toggle-eye" id="btn-toggle-pw" onclick="togglePasswordVisibility()" title="Toggle visibility">
+              👁️
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-unlock" id="btn-unlock">
+          <span>Unlock Dashboard</span>
+          <span id="unlock-arrow">➔</span>
+        </button>
+
+        <div class="login-error" id="login-error"></div>
+      </form>
+
+      <div class="login-footer">
+        Secured with Session Token Authentication
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function togglePasswordVisibility() {
+      const input = document.getElementById("dash-password");
+      const btn = document.getElementById("btn-toggle-pw");
+      if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "🙈";
+      } else {
+        input.type = "password";
+        btn.textContent = "👁️";
+      }
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const pwdInput = document.getElementById("dash-password");
+      const submitBtn = document.getElementById("btn-unlock");
+      const errBox = document.getElementById("login-error");
+      const card = document.getElementById("login-card");
+
+      const password = pwdInput.value.trim();
+      if (!password) return;
+
+      submitBtn.disabled = true;
+      submitBtn.querySelector("span").textContent = "Verifying...";
+      errBox.style.display = "none";
+      card.classList.remove("shake");
+
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: password })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          submitBtn.querySelector("span").textContent = "Unlocked! Redirecting...";
+          // Save session token in localStorage as backup
+          if (data.token) {
+            localStorage.setItem("ace_session_token", data.token);
+          }
+          window.location.href = "/";
+        } else {
+          errBox.textContent = data.detail || "Incorrect master password. Please try again.";
+          errBox.style.display = "block";
+          card.classList.add("shake");
+          pwdInput.value = "";
+          pwdInput.focus();
+        }
+      } catch (err) {
+        errBox.textContent = "Connection failed. Please check if the server is running.";
+        errBox.style.display = "block";
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.querySelector("span").textContent = "Unlock Dashboard";
+      }
+    }
+  </script>
+</body>
+</html>

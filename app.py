@@ -11,8 +11,9 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+import secrets
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
@@ -26,12 +27,47 @@ from telegram_listener import telegram_bot
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("AceApp")
 
-app = FastAPI(title="Ace775 Web Dashboard", version="1.1.0")
+app = FastAPI(title="Ace775 Web Dashboard", version="1.2.0")
 
 # Mount static folder
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# Dashboard Master Session Authentication
+ACTIVE_SESSIONS: set = set()
+COOKIE_NAME = "ace_session"
+
+
+def is_authenticated(request: Request) -> bool:
+    token = request.cookies.get(COOKIE_NAME)
+    if token and token in ACTIVE_SESSIONS:
+        return True
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        header_token = auth_header[7:].strip()
+        if header_token and header_token in ACTIVE_SESSIONS:
+            return True
+    alt_header = request.headers.get("X-Session-Token", "").strip()
+    if alt_header and alt_header in ACTIVE_SESSIONS:
+        return True
+    return False
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    # Allow static assets and public auth endpoints
+    if path.startswith("/static") or path in ["/login", "/api/auth/login", "/api/auth/check", "/favicon.ico"]:
+        return await call_next(request)
+
+    if not is_authenticated(request):
+        if path == "/" or not path.startswith("/api"):
+            return RedirectResponse(url="/login", status_code=302)
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized. Please log in."})
+
+    return await call_next(request)
+
 
 # In-memory log buffer and SSE subscriber queues
 MAX_LOG_HISTORY = 300
@@ -199,15 +235,67 @@ class SettingsUpdate(BaseModel):
     retry_interval_minutes: Optional[str] = None
 
 
+class LoginRequest(BaseModel):
+    password: str
+
+
 # ==============================================================================
-# API Routes
+# Authentication & View Routes
 # ==============================================================================
+@app.get("/login", response_class=HTMLResponse)
+def login_view(request: Request):
+    if is_authenticated(request):
+        return RedirectResponse(url="/", status_code=302)
+    login_path = os.path.join(STATIC_DIR, "login.html")
+    if os.path.exists(login_path):
+        return FileResponse(login_path)
+    return HTMLResponse("<h1>Login page missing</h1>")
+
+
 @app.get("/", response_class=HTMLResponse)
-def index_view():
+def index_view(request: Request):
+    if not is_authenticated(request):
+        return RedirectResponse(url="/login", status_code=302)
     index_path = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return HTMLResponse("<h1>Ace775 Dashboard static file missing.</h1>")
+
+
+@app.post("/api/auth/login")
+def login_api(item: LoginRequest):
+    if not db.verify_dashboard_password(item.password):
+        raise HTTPException(status_code=401, detail="Incorrect master password")
+
+    token = secrets.token_hex(24)
+    ACTIVE_SESSIONS.add(token)
+
+    response = JSONResponse(content={"success": True, "token": token})
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        max_age=86400 * 30,  # 30 days
+        httponly=True,
+        samesite="lax",
+        path="/"
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+def logout_api(request: Request):
+    token = request.cookies.get(COOKIE_NAME)
+    if token and token in ACTIVE_SESSIONS:
+        ACTIVE_SESSIONS.remove(token)
+    response = JSONResponse(content={"success": True})
+    response.delete_cookie(key=COOKIE_NAME, path="/")
+    return response
+
+
+@app.get("/api/auth/check")
+def auth_check_api(request: Request):
+    return {"authenticated": is_authenticated(request)}
+
 
 
 @app.get("/api/accounts")

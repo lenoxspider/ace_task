@@ -51,7 +51,8 @@ task_ace/
 │   │   └── dashboard.css   # Dark-mode styling with glassmorphism & chart
 │   ├── js/
 │   │   └── dashboard.js    # Reactive frontend logic, analytics, & SSE stream
-│   └── index.html          # Control center single-page app
+│   ├── index.html          # Control center single-page app
+│   └── login.html          # Password-only master lock screen
 └── README.md               # Documentation and guides
 ```
 
@@ -67,7 +68,7 @@ task_ace/
    ```text
    http://localhost:8000
    ```
-3. The dashboard displays your 7-day earnings chart, accounts, live terminal, and scheduler status.
+3. Enter your Master Password (default: `admin123` or set in `.env`/database) to unlock the dashboard.
 
 ---
 
@@ -84,6 +85,7 @@ cd ace_task
 chmod +x setup_vps.sh
 ./setup_vps.sh
 ```
+*The installer will prompt you to set your secret Master Password for the Web Dashboard.*
 
 ### 3. Run 24/7 as a Background Service
 ```bash
@@ -91,4 +93,4 @@ nohup ./venv/bin/python app.py > dashboard.log 2>&1 &
 ```
 *(Or use a systemd service as detailed in setup_vps.sh)*
 
-Access your dashboard at `http://<YOUR-VPS-IP>:8000`.
+Access your dashboard at `http://<YOUR-VPS-IP>:8000` and unlock it with your Master Password!

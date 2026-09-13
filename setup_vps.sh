@@ -30,8 +30,49 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 # 4. Install Playwright browser binaries with system dependencies
-echo "[4/4] Installing Playwright Chromium browser & OS libraries..."
+echo "[4/5] Installing Playwright Chromium browser & OS libraries..."
 python -m playwright install --with-deps chromium
+
+# 5. Dashboard Security Setup: Set Master Access Password
+echo ""
+echo "=================================================="
+echo "[5/5] 🔐 Web Dashboard Master Password Setup"
+echo "=================================================="
+echo "Protect your web dashboard with a master password."
+echo "This password is required to unlock the web dashboard on your VPS."
+echo ""
+
+while true; do
+    read -s -p "Enter Master Password for Web Dashboard: " DASH_PASS
+    echo ""
+    if [ -z "$DASH_PASS" ]; then
+        echo "Password cannot be empty. Please try again."
+        continue
+    fi
+    read -s -p "Confirm Master Password: " DASH_PASS_CONFIRM
+    echo ""
+    if [ "$DASH_PASS" != "$DASH_PASS_CONFIRM" ]; then
+        echo "❌ Passwords do not match. Please try again."
+    else
+        break
+    fi
+done
+
+# Ensure .env exists
+if [ ! -f ".env" ]; then
+    cp .env.example .env
+fi
+
+# Update or append DASHBOARD_PASSWORD in .env
+if grep -q "^DASHBOARD_PASSWORD=" .env; then
+    sed -i "s|^DASHBOARD_PASSWORD=.*|DASHBOARD_PASSWORD=$DASH_PASS|" .env
+else
+    echo "DASHBOARD_PASSWORD=$DASH_PASS" >> .env
+fi
+
+# Seed password into SQLite database settings
+python -c "import db; db.set_setting('dashboard_password', '$DASH_PASS')"
+echo "✅ Master password successfully saved!"
 
 echo ""
 echo "=================================================="
@@ -41,7 +82,7 @@ echo ""
 echo "🚀 To launch the Web Dashboard:"
 echo "     source venv/bin/activate"
 echo "     python app.py"
-echo "   Then open http://<your-vps-ip>:8000 in your browser!"
+echo "   Then open http://<your-vps-ip>:8000 in your browser and enter your Master Password!"
 echo ""
 echo "🤖 To run automation directly from CLI:"
 echo "     python ace_bot.py --mode api"
@@ -50,3 +91,4 @@ echo "⚙️ To keep the Web Dashboard running in background (systemd):"
 echo "   Run the dashboard with nohup, tmux, or create a systemd service:"
 echo "     nohup ./venv/bin/python app.py > dashboard.log 2>&1 &"
 echo "=================================================="
+

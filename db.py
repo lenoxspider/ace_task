@@ -82,7 +82,8 @@ def init_db():
         "retry_interval_minutes": "30",
         "base_url": "https://ace775.com",
         "telegram_token": os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
-        "telegram_chat_id": os.getenv("TELEGRAM_CHAT_ID", "").strip()
+        "telegram_chat_id": os.getenv("TELEGRAM_CHAT_ID", "").strip(),
+        "dashboard_password": os.getenv("DASHBOARD_PASSWORD", "admin123").strip()
     }
     for k, v in defaults.items():
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
@@ -284,6 +285,18 @@ def set_setting(key: str, value: str):
     cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
     conn.commit()
     conn.close()
+
+
+def get_dashboard_password() -> str:
+    pwd = get_setting("dashboard_password", "")
+    if not pwd:
+        pwd = os.getenv("DASHBOARD_PASSWORD", "admin123")
+    return pwd.strip()
+
+
+def verify_dashboard_password(candidate: str) -> bool:
+    expected = get_dashboard_password()
+    return bool(candidate and candidate.strip() == expected)
 
 
 init_db()

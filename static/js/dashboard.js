@@ -3,6 +3,16 @@
  * Includes Smart Scheduler, Analytics Chart, and SSE Streaming
  */
 
+// Automatically redirect to /login on session expiry
+const originalFetch = window.fetch;
+window.fetch = async function(...args) {
+  const response = await originalFetch(...args);
+  if (response.status === 401 && !window.location.pathname.startsWith("/login")) {
+    window.location.href = "/login";
+  }
+  return response;
+};
+
 let accounts = [];
 let eventSource = null;
 
@@ -387,3 +397,12 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+async function handleLogout() {
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+  } catch (e) {}
+  localStorage.removeItem("ace_session_token");
+  window.location.href = "/login";
+}
+
