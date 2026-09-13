@@ -5,7 +5,7 @@ Supports:
   2. Direct API Mode (Ultra-lightweight HTTP mode for low-memory VPS)
 
 Features:
-  - Phone + Password Login
+  - Phone + Password Login with Error Detection
   - Daily Sign-in / Check-in
   - Automated Daily Task Execution (with countdown timer & rating submission)
   - Configurable task limit (e.g. --max-tasks 3 for testing)
@@ -46,7 +46,6 @@ class TelegramReporter:
 
     def send_message(self, text: str) -> bool:
         if not self.is_configured:
-            logger.info("[Telegram] Bot token or Chat ID not configured. Skipping notification.")
             return False
 
         import requests
@@ -103,7 +102,7 @@ class TelegramReporter:
         if stats.get("error"):
             lines.extend(["", f"⚠️ <b>Notice:</b> {stats['error']}"])
 
-        lines.extend(["", "✅ <i>All automated operations finished.</i>"])
+        lines.extend(["", "✅ <i>Finished.</i>"])
         return self.send_message("\n".join(lines))
 
 
@@ -187,7 +186,7 @@ class AceApiBot:
             return True
         else:
             msg = res.get("msg", "Unknown error or invalid credentials")
-            logger.error(f"[API] Login failed: {msg} (Response: {res})")
+            logger.error(f"[API] Login failed: {msg}")
             self.stats["error"] = f"Login failed: {msg}"
             return False
 
@@ -368,13 +367,24 @@ class AcePlaywrightBot:
                 login_btn.click()
 
                 page.wait_for_timeout(3000)
-                self._dismiss_popups(page)
+
+                # Check for error dialog popup
+                dialog_msg = page.locator(".van-dialog__message").first
+                if dialog_msg.is_visible():
+                    err_txt = dialog_msg.inner_text().strip()
+                    logger.error(f"[Browser] Login alert received: '{err_txt}'")
+                    self.stats["error"] = f"Login Error: {err_txt}"
+                    self._dismiss_popups(page)
+                    return self.stats
 
                 token = page.evaluate("() => localStorage.getItem('token')")
-                if token:
-                    logger.info("[Browser] Login confirmed! Stored token found.")
-                else:
-                    logger.info(f"[Browser] Current URL: {page.url}")
+                if not token or page.url.endswith("/log"):
+                    logger.error(f"[Browser] Login not successful (URL: {page.url}). Stopping.")
+                    self.stats["error"] = "Login failed: credentials rejected or session not created."
+                    return self.stats
+
+                logger.info("[Browser] Login successful! Token acquired.")
+                self._dismiss_popups(page)
 
                 # 2. Daily Sign-In / Check-in
                 if do_checkin:
@@ -435,7 +445,6 @@ class AcePlaywrightBot:
                                 logger.info(f"[Browser] Task {i+1} is already completed. Skipping.")
                                 continue
 
-                            # Try to parse title
                             title = f"Task #{i+1}"
                             amount = "0"
                             try:
@@ -488,7 +497,6 @@ class AcePlaywrightBot:
 
                     logger.info("[Browser] All requested daily tasks processed!")
 
-                # Retrieve balance and grade from /#/user
                 try:
                     page.goto(f"{self.base_url}/#/user", wait_until="networkidle", timeout=15000)
                     page.wait_for_timeout(1500)
@@ -524,7 +532,6 @@ class AcePlaywrightBot:
             try:
                 el = page.locator(sel).first
                 if el.is_visible(timeout=500):
-                    logger.info(f"[Browser] Dismissing modal popup: {sel}")
                     el.click()
                     page.wait_for_timeout(500)
             except Exception:
