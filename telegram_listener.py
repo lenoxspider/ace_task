@@ -82,7 +82,8 @@ class TelegramCommandBot:
             ]
 
             for a in accounts:
-                status_icon = "🟢" if a["enabled"] else "⚪"
+                is_enabled = bool(a.get("enabled", 1))
+                status_icon = "🟢" if is_enabled else "⏸️ [PAUSED]"
                 lines.append(
                     f"{status_icon} <b>{a['label'] or a['phone']}</b> (VIP {a['vip_level']})\n"
                     f"   💰 Balance: {a['balance']} GHS | Tasks: {a['tasks_done_today']} | Status: {a['last_status']}"
@@ -98,9 +99,11 @@ class TelegramCommandBot:
 
             lines = ["📋 <b>Configured Accounts:</b>\n"]
             for a in accounts:
+                is_enabled = bool(a.get("enabled", 1))
+                active_str = "🟢 Active" if is_enabled else "⏸️ Paused"
                 lines.append(
                     f"• <b>{a['label'] or 'Account'}</b> (<code>+233{a['phone']}</code>)\n"
-                    f"   Mode: {a['mode'].upper()} | Active: {'Yes' if a['enabled'] else 'No'} | Max Tasks: {a['max_tasks'] or 'All'}"
+                    f"   Mode: {a['mode'].upper()} | Status: {active_str} | Max Tasks: {a['max_tasks'] or 'All'}"
                 )
             self.send_message("\n".join(lines))
 

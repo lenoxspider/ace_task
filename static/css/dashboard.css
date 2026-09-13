@@ -551,8 +551,23 @@ body {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
+.account-card.paused-card,
 .account-card.disabled {
-  opacity: 0.55;
+  opacity: 0.72;
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.03);
+}
+
+.account-card.paused-card:hover,
+.account-card.disabled:hover {
+  opacity: 0.95;
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.acc-avatar.avatar-paused {
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.4);
 }
 
 .acc-info-primary {
@@ -618,6 +633,21 @@ body {
   color: #60a5fa;
 }
 
+.badge-paused {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge-active {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
 .acc-stats-group {
   display: flex;
   gap: 24px;
@@ -664,6 +694,36 @@ body {
 .btn-run:hover {
   background: rgba(16, 185, 129, 0.3);
   transform: translateY(-1px);
+}
+
+.btn-resume-action {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--transition);
+}
+
+.btn-resume-action:hover {
+  background: rgba(16, 185, 129, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+.btn-pause-toggle {
+  color: #fbbf24;
+}
+
+.btn-pause-toggle:hover {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
 }
 
 .btn-icon-action {

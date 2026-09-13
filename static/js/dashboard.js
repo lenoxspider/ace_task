@@ -118,20 +118,24 @@ function renderAccounts(list) {
 
   container.innerHTML = list.map(acc => {
     const isRunning = runningAccountIds.has(acc.id) || acc.last_status === "Running...";
+    const isPaused = acc.enabled === 0;
     const earnedToday = Number(acc.earned_today || 0).toFixed(2);
     const tasksToday = acc.tasks_done_today || 0;
     const lifetimeEarned = Number(acc.total_earned_ghs || 0).toFixed(2);
     const lifetimeTasks = acc.total_tasks_done || 0;
 
     return `
-      <div class="account-card ${acc.enabled ? '' : 'disabled'} ${isRunning ? 'acc-running' : ''}" id="card-acc-${acc.id}">
+      <div class="account-card ${isPaused ? 'paused-card disabled' : ''} ${isRunning ? 'acc-running' : ''}" id="card-acc-${acc.id}">
         <div class="acc-info-primary">
-          <div class="acc-avatar ${isRunning ? 'pulse-avatar' : ''}">${acc.label ? acc.label.charAt(0).toUpperCase() : 'A'}</div>
+          <div class="acc-avatar ${isRunning ? 'pulse-avatar' : ''} ${isPaused ? 'avatar-paused' : ''}">${acc.label ? acc.label.charAt(0).toUpperCase() : 'A'}</div>
           <div class="acc-details">
             <div class="acc-label-row">
               <span class="acc-label">${escapeHtml(acc.label || 'Account')}</span>
               <span class="badge badge-vip">${escapeHtml(acc.vip_level || 'VIP')}</span>
               <span class="badge badge-mode">${escapeHtml(acc.mode.toUpperCase())}</span>
+              ${isPaused 
+                ? `<span class="badge badge-paused" title="Task automation is paused for this account">⏸️ PAUSED</span>` 
+                : `<span class="badge badge-active" title="Task automation is active">ACTIVE</span>`}
               <span class="badge badge-running-indicator" style="display: ${isRunning ? 'inline-flex' : 'none'};">
                 <span class="spinner-dot"></span> RUNNING NOW
               </span>
@@ -170,9 +174,16 @@ function renderAccounts(list) {
         </div>
 
         <div class="acc-actions">
-          <button class="btn-run ${isRunning ? 'btn-running-active' : ''}" onclick="runAccount(${acc.id})" ${isRunning ? 'disabled' : ''}>
-            ${isRunning ? '<span class="spinner-dot"></span> Running...' : '▶ Run'}
-          </button>
+          ${isPaused ? `
+            <button class="btn-resume-action" onclick="toggleAccountPause(${acc.id})" title="Resume bot tasks for this account">
+              ▶️ Resume
+            </button>
+          ` : `
+            <button class="btn-run ${isRunning ? 'btn-running-active' : ''}" onclick="runAccount(${acc.id})" ${isRunning ? 'disabled' : ''} title="Run tasks for this account">
+              ${isRunning ? '<span class="spinner-dot"></span> Running...' : '▶ Run'}
+            </button>
+            <button class="btn-icon-action btn-pause-toggle" title="Pause bot from completing tasks for this account" onclick="toggleAccountPause(${acc.id})">⏸️</button>
+          `}
           <button class="btn-icon-action" id="btn-refresh-${acc.id}" title="Refresh Live Balance" onclick="refreshAccountBalance(${acc.id})">🔄</button>
           <button class="btn-icon-action" title="Request Withdrawal" onclick="openWithdrawModal(${acc.id})">💸</button>
           <button class="btn-icon-action" title="Execution History" onclick="openHistoryModal(${acc.id})">📜</button>
@@ -186,6 +197,7 @@ function renderAccounts(list) {
 
 function getStatusColor(status) {
   if (!status) return "var(--text-muted)";
+  if (status.includes("Paused")) return "var(--warning)";
   if (status.includes("Completed") || status.includes("Verified")) return "var(--success)";
   if (status.includes("Running")) return "var(--accent-cyan)";
   if (status.includes("Failed") || status.includes("Error")) return "var(--danger)";
@@ -264,10 +276,35 @@ async function runAccount(id) {
   try {
     const res = await fetch(`/api/accounts/${id}/run`, { method: "POST" });
     const data = await res.json();
+    if (!res.ok) {
+      alert(data.message || data.detail || "Failed to start run");
+      appendTerminalLog(`⚠️ Cannot run account #${id}: ${data.message || data.detail}`, "warning");
+      return;
+    }
     appendTerminalLog(`[COMMAND] Run triggered for account #${id}`, "info");
     loadAccounts();
   } catch (err) {
     alert("Failed to start run: " + err.message);
+  }
+}
+
+async function toggleAccountPause(accountId) {
+  try {
+    const res = await fetch(`/api/accounts/${accountId}/toggle-pause`, {
+      method: "POST"
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.detail || data.message || "Failed to update account pause state");
+      return;
+    }
+    const isPaused = data.is_paused;
+    const label = data.account?.label || `Account #${accountId}`;
+    appendTerminalLog(`[COMMAND] ${isPaused ? '⏸️ Paused' : '▶️ Resumed'} tasks for ${label}`, isPaused ? "warning" : "success");
+    await Promise.all([loadAccounts(), loadStats()]);
+  } catch (err) {
+    console.error("Error toggling pause state:", err);
+    alert("Network error updating account pause state.");
   }
 }
 

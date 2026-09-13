@@ -88,9 +88,9 @@ class SmartScheduler:
         auto_retry = db.get_setting("auto_retry_outside_hours", "1") == "1"
         retry_interval = int(db.get_setting("retry_interval_minutes", "30"))
 
-        # Check if accounts had "Outside working hours"
+        # Check if accounts had "Outside working hours" (ignoring paused accounts)
         accounts = db.get_accounts()
-        outside_hours = any("working hours" in (a.get("last_status") or "").lower() for a in accounts)
+        outside_hours = any("working hours" in (a.get("last_status") or "").lower() for a in accounts if a.get("enabled", 1))
 
         if outside_hours and auto_retry and datetime.now().weekday() != 6:
             self.retry_at = datetime.now() + timedelta(minutes=retry_interval)

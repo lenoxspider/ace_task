@@ -124,6 +124,12 @@ def run_single_account(account_id: int):
     max_tasks = account.get("max_tasks", 0)
     base_url = db.get_setting("base_url", "https://ace775.com")
 
+    # Paused Guard: Check if operator has paused this account from completing tasks
+    if account.get("enabled", 1) == 0:
+        broadcast_log(f"⏸️ Account '{label}' (+233 {phone}) is PAUSED. Automation skipped.", "warning")
+        db.update_account_stats(account_id, last_status="Paused")
+        return
+
     RUNNING_ACCOUNT_IDS.add(account_id)
     broadcast_log(f"[ACCOUNT_RUNNING:{account_id}]", "event")
 
@@ -566,6 +572,34 @@ def update_account_api(account_id: int, item: AccountUpdate):
     return acc
 
 
+@app.post("/api/accounts/{account_id}/toggle-pause")
+def toggle_account_pause_api(account_id: int):
+    account = db.get_account(account_id, decrypt=False)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    current_enabled = int(account.get("enabled", 1))
+    new_enabled = 0 if current_enabled == 1 else 1
+    new_status = "Paused" if new_enabled == 0 else "Ready"
+
+    updated = db.update_account(account_id, enabled=new_enabled)
+    db.update_account_stats(account_id, last_status=new_status)
+
+    label = account.get("label") or account.get("phone")
+    if new_enabled == 0:
+        broadcast_log(f"⏸️ Account '{label}' (+233 {account.get('phone')}) PAUSED. Task automation is suspended for this account.", "warning")
+    else:
+        broadcast_log(f"▶️ Account '{label}' (+233 {account.get('phone')}) RESUMED. Task automation is re-enabled for this account.", "success")
+
+    return {
+        "status": "success",
+        "enabled": new_enabled,
+        "is_paused": new_enabled == 0,
+        "last_status": new_status,
+        "account": updated
+    }
+
+
 
 @app.post("/api/accounts/{account_id}/refresh-balance")
 def refresh_account_balance_api(account_id: int):
@@ -777,6 +811,12 @@ def trigger_single_run(account_id: int, background_tasks: BackgroundTasks):
     account = db.get_account(account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+    if account.get("enabled", 1) == 0:
+        label = account.get("label") or account.get("phone")
+        return JSONResponse(status_code=400, content={
+            "status": "paused",
+            "message": f"Account '{label}' is currently PAUSED. Click '▶️ Resume' on the dashboard to re-enable task execution."
+        })
     if datetime.now().weekday() == 6:
         broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Tasks suspended today.", "warning")
         db.update_account_stats(account_id, last_status="Sunday: Rest Day")
