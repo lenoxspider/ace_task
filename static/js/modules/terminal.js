@@ -53,23 +53,31 @@ export function initTerminal(onAccountStateChange) {
 }
 
 export function appendTerminalLog(text, level = "info") {
-  const container = document.getElementById("terminal-logs");
-  if (!container) return;
+  const containers = [
+    document.getElementById("terminal-logs"),
+    document.getElementById("terminal-page-logs")
+  ].filter(Boolean);
 
-  const el = document.createElement("div");
-  el.className = `log-line log-${level}`;
-  el.innerText = text;
-  container.appendChild(el);
+  if (containers.length === 0) return;
 
-  const autoScroll = document.getElementById("chk-autoscroll");
-  if (!autoScroll || autoScroll.checked) {
-    container.scrollTop = container.scrollHeight;
-  }
+  containers.forEach(container => {
+    const el = document.createElement("div");
+    el.className = `log-line log-${level}`;
+    el.innerText = text;
+    container.appendChild(el);
+
+    const autoScroll = document.getElementById("chk-autoscroll");
+    if (!autoScroll || autoScroll.checked) {
+      container.scrollTop = container.scrollHeight;
+    }
+  });
 }
 
 export function clearTerminalLogs() {
-  const container = document.getElementById("terminal-logs");
-  if (container) {
-    container.innerHTML = "";
-  }
+  const containers = [
+    document.getElementById("terminal-logs"),
+    document.getElementById("terminal-page-logs")
+  ].filter(Boolean);
+
+  containers.forEach(c => c.innerHTML = "");
 }

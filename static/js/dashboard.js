@@ -1,11 +1,12 @@
 /**
  * Ace775 Command Center - Master Application Bootstrap
- * Orchestrates modular components, state management, and real-time streams.
+ * Orchestrates modular components, state management, multi-page router, and real-time streams.
  */
 
 import { api } from "./modules/api.js";
 import { state, setAccounts } from "./modules/state.js";
 import { initTheme, toggleTheme } from "./modules/theme.js";
+import { initRouter, navigate } from "./modules/router.js";
 import { initTerminal, appendTerminalLog, clearTerminalLogs } from "./modules/terminal.js";
 import {
   renderAccounts,
@@ -34,19 +35,26 @@ import {
   handleManualWithdrawSubmit,
   openHistoryModal,
   closeHistoryModal,
+  loadAuditHistoryTable,
+  loadWithdrawalsView,
   openImportModal,
   closeImportModal,
   handleCsvFileUpload,
   handleCsvImport,
   openSettingsModal,
   closeSettingsModal,
+  loadSettings,
   handleSettingsSubmit
 } from "./modules/modals.js";
 
-// Expose handlers to window for HTML event attributes
+// Multi-Page Router Navigation
+window.navigate = navigate;
+
+// Theme & Auth
 window.toggleTheme = toggleTheme;
 window.handleLogout = () => api.logout();
 
+// Account Actions
 window.toggleAccountPause = toggleAccountPause;
 window.runAccount = runAccount;
 window.runAllAccounts = runAllAccounts;
@@ -55,6 +63,7 @@ window.deleteAccount = deleteAccount;
 window.filterAccounts = filterAccounts;
 window.setAccountFilter = setAccountFilter;
 
+// Modals
 window.openAccountModal = openAccountModal;
 window.editAccount = editAccount;
 window.closeAccountModal = closeAccountModal;
@@ -78,16 +87,25 @@ window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
 window.handleSettingsSubmit = handleSettingsSubmit;
 
+// Page Data Loaders
 window.clearTerminalLogs = clearTerminalLogs;
 window.loadStats = loadStats;
 window.loadAccounts = loadAccounts;
+window.loadAnalytics = loadAnalytics;
+window.loadSchedulerStatus = loadSchedulerStatus;
+window.loadSettings = loadSettings;
+window.loadAuditHistoryTable = loadAuditHistoryTable;
+window.loadWithdrawalsView = loadWithdrawalsView;
 
+// Mobile Sidebar Drawer
 window.toggleMobileMenu = function() {
-  const actions = document.getElementById("header-actions");
-  if (actions) actions.classList.toggle("open");
+  const sidebar = document.getElementById("sidebar");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  if (sidebar) sidebar.classList.toggle("open");
+  if (backdrop) backdrop.classList.toggle("active");
 };
 
-// Check active runs
+// Check active runs periodically
 async function checkActiveRuns() {
   try {
     const res = await api.request("/api/run/active");
@@ -113,15 +131,16 @@ async function checkActiveRuns() {
   }
 }
 
-// Bootstrap
+// Bootstrap Application
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
+  initRouter();
   loadSchedulerStatus();
   loadStats();
   loadAnalytics();
   loadAccounts();
 
-  // Initialize live terminal SSE stream with reactive state hooks
+  // Initialize live terminal SSE stream
   initTerminal((refreshAccounts = false) => {
     updateRunningVisuals();
     if (refreshAccounts) {
@@ -132,7 +151,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Periodic polls
+  // Periodic background sync
   setInterval(checkActiveRuns, 4000);
   setInterval(loadSchedulerStatus, 30000);
 });

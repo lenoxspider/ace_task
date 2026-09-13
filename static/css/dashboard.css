@@ -4,6 +4,7 @@
 
 @import url("./variables.css");
 @import url("./base.css");
+@import url("./sidebar.css");
 @import url("./header.css");
 @import url("./stats.css");
 @import url("./accounts.css");

@@ -293,6 +293,70 @@ export async function openHistoryModal(accountId = null) {
   }
 }
 
+export async function loadAuditHistoryTable(accountId = null) {
+  const tbody = document.getElementById("history-page-table-body");
+  const countBadge = document.getElementById("badge-history-page-count");
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="6" class="table-empty">Loading audit records...</td></tr>`;
+
+  try {
+    const records = await api.getHistory(accountId);
+    if (countBadge) countBadge.innerText = records.length;
+
+    if (records.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No execution history recorded yet.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = records.map(r => `
+      <tr>
+        <td style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-dim); white-space:nowrap;">${escapeHtml(r.run_time || '')}</td>
+        <td><strong>${escapeHtml(r.label || r.phone || 'Account')}</strong><br><small style="color:var(--text-dim)">+233 ${escapeHtml(r.phone || '')}</small></td>
+        <td><span class="badge" style="background:${r.status && r.status.includes('Completed') ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}; color:${r.status && r.status.includes('Completed') ? 'var(--success)' : 'var(--danger)'};">${escapeHtml(r.status || 'N/A')}</span></td>
+        <td>${r.tasks_done || 0}</td>
+        <td style="color:var(--success); font-weight:600;">+${Number(r.earned || 0).toFixed(2)} GHS</td>
+        <td style="color:var(--accent-cyan); font-weight:600;">${escapeHtml(r.balance || '0')} GHS</td>
+      </tr>
+    `).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty" style="color:var(--danger)">Error: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+export function loadWithdrawalsView() {
+  const select = document.getElementById("paged-withdraw-acc-id");
+  const accs = state.accounts || [];
+  if (select) {
+    select.innerHTML = `<option value="">-- Select Account --</option>` + accs.map(a => `
+      <option value="${a.id}" data-balance="${a.balance || 0}">${escapeHtml(a.label || a.phone)} (${a.balance || 0} GHS)</option>
+    `).join("");
+  }
+
+  const tbody = document.getElementById("withdrawals-table-body");
+  if (tbody) {
+    if (accs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No accounts available.</td></tr>`;
+      return;
+    }
+    const todayStr = new Date().toISOString().split('T')[0];
+    tbody.innerHTML = accs.map(a => `
+      <tr>
+        <td><strong>${escapeHtml(a.label || a.phone)}</strong><br><small style="color:var(--text-dim)">+233 ${escapeHtml(a.phone)}</small></td>
+        <td><strong style="color:var(--accent-cyan);">${a.balance || '0.00'} GHS</strong></td>
+        <td>
+          <span class="badge ${a.auto_withdraw === 1 ? 'badge-active' : 'badge-paused'}">
+            ${a.auto_withdraw === 1 ? 'ENABLED' : 'DISABLED'}
+          </span>
+        </td>
+        <td>${a.withdraw_amount > 0 ? a.withdraw_amount + ' GHS' : 'Full Bal'}</td>
+        <td>${a.last_withdraw_date ? escapeHtml(a.last_withdraw_date) : '<span style="color:var(--text-dim)">None</span>'}</td>
+        <td><span style="font-size:0.8rem; color:${a.last_withdraw_date === todayStr ? 'var(--success)' : 'var(--text-dim)'}">${escapeHtml(a.last_withdraw_status || 'Ready')}</span></td>
+      </tr>
+    `).join("");
+  }
+}
+
 export function closeHistoryModal() {
   document.getElementById("history-modal").classList.remove("active");
 }

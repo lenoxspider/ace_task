@@ -367,7 +367,12 @@ def login_view(request: Request):
 
 
 @app.get("/", response_class=HTMLResponse)
-def index_view(request: Request):
+@app.get("/accounts", response_class=HTMLResponse)
+@app.get("/terminal", response_class=HTMLResponse)
+@app.get("/history", response_class=HTMLResponse)
+@app.get("/withdrawals", response_class=HTMLResponse)
+@app.get("/settings", response_class=HTMLResponse)
+def dashboard_view(request: Request):
     if not is_authenticated(request):
         return RedirectResponse(url="/login", status_code=302)
     index_path = os.path.join(STATIC_DIR, "index.html")

@@ -4,168 +4,474 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ace775 Automation Control Center</title>
-  <meta name="description" content="Multi-account automation control panel for Ace775 daily task claims and check-ins.">
+  <meta name="description" content="Multi-account automation control panel for Ace775 daily task claims, check-ins, and scheduled operations.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
-  <div class="app-container">
+
+  <div class="app-shell">
     
-    <!-- Top Header -->
-    <header class="top-header">
-      <div class="brand-group">
-        <div class="brand-logo">⚡</div>
-        <div class="brand-text">
-          <h1>Ace775 Command Center</h1>
-          <p class="subtitle">Multi-Account Automation & Auto-Scheduler</p>
+    <!-- Mobile Backdrop -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleMobileMenu()"></div>
+
+    <!-- Navigation Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">⚡</div>
+        <div class="sidebar-brand">
+          <h1>Ace775 Command</h1>
+          <p class="subtitle">Multi-Account Automation</p>
         </div>
-        <button id="btn-mobile-menu" class="btn-hamburger" onclick="toggleMobileMenu()" aria-label="Toggle Navigation">
-          <span class="hamburger-bar"></span>
-          <span class="hamburger-bar"></span>
-          <span class="hamburger-bar"></span>
-        </button>
       </div>
-      <div class="header-actions" id="header-actions">
+
+      <nav class="sidebar-nav">
+        <span class="nav-section-title">Core Management</span>
+        <a class="nav-link active" data-page="overview" onclick="navigate('overview')">
+          <span class="nav-icon">📊</span> Overview
+        </a>
+        <a class="nav-link" data-page="accounts" onclick="navigate('accounts')">
+          <span class="nav-icon">👥</span> Accounts
+          <span class="nav-badge" id="badge-account-count">0</span>
+        </a>
+        <a class="nav-link" data-page="terminal" onclick="navigate('terminal')">
+          <span class="nav-icon">💻</span> Live Terminal
+          <span class="sched-dot"></span>
+        </a>
+
+        <span class="nav-section-title" style="margin-top:12px;">Finance & Operations</span>
+        <a class="nav-link" data-page="withdrawals" onclick="navigate('withdrawals')">
+          <span class="nav-icon">💸</span> Withdrawals
+        </a>
+        <a class="nav-link" data-page="history" onclick="navigate('history')">
+          <span class="nav-icon">📜</span> Audit History
+        </a>
+        <a class="nav-link" data-page="settings" onclick="navigate('settings')">
+          <span class="nav-icon">⚙️</span> Settings
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
         <div class="scheduler-pill" id="header-scheduler-badge" title="Smart Working Hours Auto-Scheduler">
           <span class="sched-dot"></span>
           <span id="header-scheduler-text">Scheduler: Active (09:00)</span>
         </div>
-        <button id="btn-theme-toggle" class="btn btn-ghost" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
-          <span class="btn-icon" id="theme-icon">☀️</span> <span class="btn-text-theme">Theme</span>
-        </button>
-        <button id="btn-settings" class="btn btn-secondary" onclick="openSettingsModal()">
-          <span class="btn-icon">⚙️</span> Settings
-        </button>
-        <button id="btn-logout" class="btn btn-ghost" onclick="handleLogout()" title="Lock dashboard & log out">
-          <span class="btn-icon">🔒</span> Lock
-        </button>
-        <button id="btn-import-csv" class="btn btn-secondary" onclick="openImportModal()" title="Batch import accounts via CSV">
-          <span class="btn-icon">📥</span> Import CSV
-        </button>
-        <button id="btn-add-account" class="btn btn-secondary" onclick="openAccountModal()">
-          <span class="btn-icon">+</span> Add Account
-        </button>
-        <button id="btn-run-all" class="btn btn-primary" onclick="runAllAccounts()">
-          <span class="btn-icon">▶</span> Run All Active
-        </button>
-      </div>
-    </header>
-
-    <!-- Stats Banner -->
-    <section class="stats-grid" id="stats-section">
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-title">Total Accounts</span>
-          <span class="stat-icon">👥</span>
-        </div>
-        <div class="stat-value" id="stat-total-accounts">0</div>
-        <div class="stat-footer" id="stat-active-subtitle">0 active in rotation</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-title">Tasks Completed Today</span>
-          <span class="stat-icon">✅</span>
-        </div>
-        <div class="stat-value" id="stat-tasks-today">0</div>
-        <div class="stat-footer">Across all accounts</div>
-      </div>
-
-      <div class="stat-card accent-card">
-        <div class="stat-header">
-          <span class="stat-title">Total Earned Today</span>
-          <span class="stat-icon">💰</span>
-        </div>
-        <div class="stat-value" id="stat-earned-today">0.00 <span class="currency">GHS</span></div>
-        <div class="stat-footer">Direct account profits</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-header">
-          <span class="stat-title">Telegram Bot</span>
-          <span class="stat-icon">📱</span>
-        </div>
-        <div class="stat-value status-active" id="stat-telegram-status">Connected</div>
-        <div class="stat-footer">Two-Way /status & /run</div>
-      </div>
-    </section>
-
-    <!-- Financial Analytics: 7-Day Earnings Trend -->
-    <section class="content-panel analytics-panel">
-      <div class="panel-header">
-        <div class="panel-title-group">
-          <h2>7-Day Earnings & Activity Trend</h2>
-          <span class="badge badge-mode">GHS Performance</span>
-        </div>
-        <div class="panel-tools">
-          <button class="btn btn-xs btn-ghost" onclick="openHistoryModal()" title="View full execution audit log">
-            <span class="btn-icon">📜</span> Audit Log
+        <div class="sidebar-actions-row">
+          <button id="btn-theme-toggle" class="btn btn-xs btn-ghost" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+            <span id="theme-icon">☀️</span> Theme
           </button>
-          <a href="/api/export/csv" class="btn btn-xs btn-secondary" download="ace775_financial_report.csv" title="Download Excel/CSV Spreadsheet">
-            <span class="btn-icon">💾</span> Export CSV
-          </a>
+          <button id="btn-logout" class="btn btn-xs btn-ghost" onclick="handleLogout()" title="Lock dashboard & log out">
+            <span>🔒</span> Lock
+          </button>
         </div>
       </div>
-      <div class="chart-container" id="chart-container">
-        <!-- Responsive SVG Chart Rendered Here -->
-        <div class="empty-placeholder">Loading 7-day analytics...</div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content-area">
+
+      <!-- Mobile Top Bar -->
+      <div class="mobile-top-bar">
+        <div class="brand-group">
+          <div class="brand-logo" style="width:34px;height:34px;font-size:1.1rem;">⚡</div>
+          <span style="font-weight:700;font-size:1rem;">Ace775 Command</span>
+        </div>
+        <button class="btn-hamburger" onclick="toggleMobileMenu()" aria-label="Toggle Navigation">
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+        </button>
       </div>
-    </section>
 
-    <!-- Main Section: Accounts Table & Console -->
-    <main class="main-content">
-      
-      <!-- Accounts Panel -->
-      <section class="content-panel accounts-panel">
-        <div class="panel-header">
-          <div class="panel-title-group">
-            <h2>Configured Accounts</h2>
-            <span class="badge badge-count" id="badge-account-count">0</span>
+      <!-- ====================================================================
+           PAGE 1: OVERVIEW
+           ==================================================================== -->
+      <div class="page-view active" id="page-overview">
+        <div class="page-header-row">
+          <div class="page-title">
+            <h2>Command Center Overview</h2>
+            <p>System vitals, active rotation metrics, and 7-day earnings trajectory.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="openImportModal()" title="Batch import accounts via CSV">
+              <span class="btn-icon">📥</span> Import CSV
+            </button>
+            <button class="btn btn-secondary" onclick="openAccountModal()">
+              <span class="btn-icon">+</span> Add Account
+            </button>
+            <button class="btn btn-primary" id="btn-run-all" onclick="runAllAccounts()">
+              <span class="btn-icon">▶</span> Run All Active
+            </button>
           </div>
         </div>
 
-        <div class="accounts-toolbar">
-          <div class="filter-tabs" id="account-filter-tabs">
-            <button class="filter-tab active" data-filter="all" onclick="setAccountFilter('all')">All (<span id="filter-cnt-all">0</span>)</button>
-            <button class="filter-tab" data-filter="active" onclick="setAccountFilter('active')">🟢 Active (<span id="filter-cnt-active">0</span>)</button>
-            <button class="filter-tab" data-filter="paused" onclick="setAccountFilter('paused')">⏸️ Paused (<span id="filter-cnt-paused">0</span>)</button>
-            <button class="filter-tab" data-filter="running" onclick="setAccountFilter('running')">⚡ Running (<span id="filter-cnt-running">0</span>)</button>
+        <!-- 4-Card Stats Banner -->
+        <section class="stats-grid" id="stats-section">
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-title">Total Accounts</span>
+              <span class="stat-icon">👥</span>
+            </div>
+            <div class="stat-value" id="stat-total-accounts">0</div>
+            <div class="stat-footer" id="stat-active-subtitle">0 active in rotation</div>
           </div>
-          <div class="search-wrapper">
-            <input type="text" id="account-search" placeholder="Search phone or label..." oninput="filterAccounts()">
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-title">Tasks Completed Today</span>
+              <span class="stat-icon">✅</span>
+            </div>
+            <div class="stat-value" id="stat-tasks-today">0</div>
+            <div class="stat-footer">Across all accounts</div>
+          </div>
+
+          <div class="stat-card accent-card">
+            <div class="stat-header">
+              <span class="stat-title">Total Earned Today</span>
+              <span class="stat-icon">💰</span>
+            </div>
+            <div class="stat-value" id="stat-earned-today">0.00 <span class="currency">GHS</span></div>
+            <div class="stat-footer">Direct account profits</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-title">Telegram Bot</span>
+              <span class="stat-icon">📱</span>
+            </div>
+            <div class="stat-value status-active" id="stat-telegram-status">Connected</div>
+            <div class="stat-footer">Two-Way /status & /run</div>
+          </div>
+        </section>
+
+        <!-- 7-Day Performance Trend Chart -->
+        <section class="content-panel analytics-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2>7-Day Earnings & Activity Trend</h2>
+              <span class="badge badge-mode">GHS Performance</span>
+            </div>
+            <div class="panel-tools">
+              <button class="btn btn-xs btn-ghost" onclick="navigate('history')" title="View full execution audit log">
+                <span class="btn-icon">📜</span> Audit Log
+              </button>
+              <a href="/api/export/csv" class="btn btn-xs btn-secondary" download="ace775_financial_report.csv" title="Download Excel/CSV Spreadsheet">
+                <span class="btn-icon">💾</span> Export CSV
+              </a>
+            </div>
+          </div>
+          <div class="chart-container" id="chart-container">
+            <div class="empty-placeholder">Loading 7-day analytics...</div>
+          </div>
+        </section>
+
+        <!-- Overview Quick Accounts & Terminal Grid -->
+        <div class="main-content">
+          <!-- Accounts Section -->
+          <section class="content-panel accounts-panel">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <h2>Accounts Rotation</h2>
+              </div>
+              <div class="panel-tools">
+                <button class="btn btn-xs btn-ghost" onclick="navigate('accounts')">View All &rarr;</button>
+              </div>
+            </div>
+            <div class="accounts-container" id="accounts-list">
+              <div class="empty-placeholder">Loading accounts...</div>
+            </div>
+          </section>
+
+          <!-- Live Terminal Preview -->
+          <section class="content-panel terminal-panel">
+            <div class="panel-header">
+              <div class="panel-title-group">
+                <h2>Live Automation Console</h2>
+                <span class="pulse-indicator"></span>
+              </div>
+              <div class="panel-tools">
+                <button class="btn btn-xs btn-ghost" onclick="navigate('terminal')">Full View &rarr;</button>
+                <button class="btn btn-xs btn-ghost" onclick="clearTerminalLogs()">Clear</button>
+              </div>
+            </div>
+            <div class="terminal-body" id="terminal-logs">
+              <div class="log-line log-info">[SYSTEM] Connected to automation stream. Ready.</div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ====================================================================
+           PAGE 2: ACCOUNTS MANAGEMENT
+           ==================================================================== -->
+      <div class="page-view" id="page-accounts">
+        <div class="page-header-row">
+          <div class="page-title">
+            <h2>Configured Accounts Manager</h2>
+            <p>Manage credentials, VIP levels, auto-withdrawal targets, and 1-click pause/resume task controls.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="openImportModal()">
+              <span class="btn-icon">📥</span> Import CSV
+            </button>
+            <button class="btn btn-secondary" onclick="openAccountModal()">
+              <span class="btn-icon">+</span> Add Account
+            </button>
+            <button class="btn btn-primary" onclick="runAllAccounts()">
+              <span class="btn-icon">▶</span> Run All Active
+            </button>
           </div>
         </div>
 
-        <div class="accounts-container" id="accounts-list">
-          <!-- Dynamically populated -->
-          <div class="empty-placeholder">Loading accounts...</div>
-        </div>
-      </section>
-
-      <!-- Live Terminal / Console Panel -->
-      <section class="content-panel terminal-panel">
-        <div class="panel-header">
-          <div class="panel-title-group">
-            <h2>Live Automation Console</h2>
-            <span class="pulse-indicator"></span>
+        <section class="content-panel full-page-panel">
+          <div class="accounts-toolbar">
+            <div class="filter-tabs" id="account-filter-tabs">
+              <button class="filter-tab active" data-filter="all" onclick="setAccountFilter('all')">
+                All (<span id="filter-cnt-all">0</span>)
+              </button>
+              <button class="filter-tab" data-filter="active" onclick="setAccountFilter('active')">
+                🟢 Active (<span id="filter-cnt-active">0</span>)
+              </button>
+              <button class="filter-tab" data-filter="paused" onclick="setAccountFilter('paused')">
+                ⏸️ Paused (<span id="filter-cnt-paused">0</span>)
+              </button>
+              <button class="filter-tab" data-filter="running" onclick="setAccountFilter('running')">
+                ⚡ Running (<span id="filter-cnt-running">0</span>)
+              </button>
+            </div>
+            <div class="search-wrapper">
+              <input type="text" id="account-search" placeholder="Search phone or label..." oninput="filterAccounts()">
+            </div>
           </div>
-          <div class="panel-tools">
-            <button class="btn btn-xs btn-ghost" onclick="clearTerminalLogs()">Clear</button>
-            <label class="toggle-label">
+
+          <div class="accounts-container" id="accounts-page-list">
+            <!-- Dynamically populated -->
+            <div class="empty-placeholder">Loading accounts...</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ====================================================================
+           PAGE 3: LIVE TERMINAL
+           ==================================================================== -->
+      <div class="page-view" id="page-terminal">
+        <div class="page-header-row">
+          <div class="page-title">
+            <h2>Live Automation Console & Stream</h2>
+            <p>Real-time execution telemetry, anti-ban pacing logs, and network verification events.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="clearTerminalLogs()">
+              <span class="btn-icon">🧹</span> Clear Logs
+            </button>
+            <label class="toggle-label" style="margin-left:8px;">
               <input type="checkbox" id="chk-autoscroll" checked> Auto-scroll
             </label>
           </div>
         </div>
-        <div class="terminal-body" id="terminal-logs">
-          <!-- Streaming log lines -->
-          <div class="log-line log-info">[SYSTEM] Connected to automation stream. Ready.</div>
+
+        <section class="content-panel full-page-panel terminal-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <span class="pulse-indicator"></span>
+              <span style="font-size:0.85rem;font-weight:600;color:var(--text-main);">SSE Stream: /api/logs/stream</span>
+            </div>
+            <div class="panel-tools">
+              <span class="badge badge-active">CONNECTED</span>
+            </div>
+          </div>
+          <div class="terminal-body" id="terminal-page-logs" style="max-height:calc(100vh - 240px); height:600px;">
+            <div class="log-line log-info">[SYSTEM] Live terminal initialized. Ready for automation events.</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ====================================================================
+           PAGE 4: AUDIT HISTORY
+           ==================================================================== -->
+      <div class="page-view" id="page-history">
+        <div class="page-header-row">
+          <div class="page-title">
+            <h2>Execution Audit History & Logs</h2>
+            <p>Complete historical log of daily task executions, claimed commissions, and error diagnostics.</p>
+          </div>
+          <div class="header-actions">
+            <a href="/api/export/csv" class="btn btn-secondary" download="ace775_financial_report.csv">
+              <span class="btn-icon">💾</span> Export CSV
+            </a>
+          </div>
         </div>
-      </section>
+
+        <section class="content-panel full-page-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2>Execution Records</h2>
+              <span class="badge badge-count" id="badge-history-page-count">0</span>
+            </div>
+            <div class="panel-tools">
+              <button class="btn btn-xs btn-secondary" onclick="loadAuditHistoryTable()">
+                <span class="btn-icon">🔄</span> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="history-table-wrapper" style="max-height:calc(100vh - 260px);">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Account</th>
+                  <th>Execution Status</th>
+                  <th>Tasks</th>
+                  <th>Profit Earned</th>
+                  <th>Wallet Balance</th>
+                </tr>
+              </thead>
+              <tbody id="history-page-table-body">
+                <tr><td colspan="6" class="table-empty">Loading history records...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ====================================================================
+           PAGE 5: WITHDRAWALS & PAYOUTS
+           ==================================================================== -->
+      <div class="page-view" id="page-withdrawals">
+        <div class="page-header-row">
+          <div class="page-title">
+            <h2>Financial Payouts & Withdrawals</h2>
+            <p>Monitor wallet balances, submit daily withdrawals, and review automatic payout rules.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" onclick="openWithdrawModal()">
+              <span class="btn-icon">💸</span> Request Withdrawal
+            </button>
+          </div>
+        </div>
+
+        <!-- Withdrawal Notice Banner -->
+        <div class="stat-card accent-card" style="padding:16px 20px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:1.6rem;">⏱️</span>
+            <div>
+              <strong style="color:#ffffff;">Ace775 Platform Withdrawal Window: 09:00 – 17:00 Daily</strong>
+              <p style="font-size:0.8rem; color:var(--text-muted);">
+                You can withdraw once per calendar day to your bound Mobile Money (MoMo) account. Auto-withdrawals run automatically after tasks complete when enabled.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accounts Auto-Withdrawal Status Table -->
+        <section class="content-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2>Accounts Withdrawal Configuration</h2>
+            </div>
+            <div class="panel-tools">
+              <button class="btn btn-xs btn-secondary" onclick="loadWithdrawalsView()">
+                <span class="btn-icon">🔄</span> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="history-table-wrapper">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Balance</th>
+                  <th>Auto-Withdraw</th>
+                  <th>Target Amount</th>
+                  <th>Last Withdraw Date</th>
+                  <th>Last Payout Status</th>
+                </tr>
+              </thead>
+              <tbody id="withdrawals-table-body">
+                <tr><td colspan="6" class="table-empty">Loading accounts payout data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ====================================================================
+           PAGE 6: SETTINGS
+           ==================================================================== -->
+      <div class="page-view" id="page-settings">
+        <div class="page-header-row">
+          <div class="page-title">
+            <h2>System & Automation Settings</h2>
+            <p>Configure auto-scheduler working hours, two-way Telegram control, and platform base URLs.</p>
+          </div>
+        </div>
+
+        <section class="content-panel" style="max-width:760px;">
+          <form onsubmit="handleSettingsSubmit(event)">
+            <h4 class="settings-subhead">⏰ Working Hours Auto-Scheduler</h4>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="set-sched-time">Daily Slot 1</label>
+                <input type="time" id="set-sched-time" value="09:00" required>
+              </div>
+              <div class="form-group flex-1">
+                <label for="set-sched-time-2">Daily Slot 2 (Optional)</label>
+                <input type="time" id="set-sched-time-2" value="" placeholder="--:--">
+              </div>
+              <div class="form-group flex-1">
+                <label for="set-retry-mins">Retry Delay (Mins)</label>
+                <input type="number" id="set-retry-mins" value="30" min="5" max="180">
+              </div>
+            </div>
+
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="set-sched-enabled" checked> Enable daily scheduled auto-run
+              </label>
+            </div>
+
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="set-auto-retry" checked> Auto-retry when "Outside working hours"
+              </label>
+            </div>
+
+            <h4 class="settings-subhead" style="margin-top:16px;">📱 Two-Way Telegram Control</h4>
+            <div class="form-group">
+              <label for="set-tg-token">Telegram Bot Token</label>
+              <input type="text" id="set-tg-token" placeholder="8447722246:AAG9_XVP..." autocomplete="off">
+              <span class="form-hint">From @BotFather on Telegram.</span>
+            </div>
+
+            <div class="form-group">
+              <label for="set-tg-chat">Telegram Chat ID (Authorized)</label>
+              <input type="text" id="set-tg-chat" placeholder="5511238401" autocomplete="off">
+              <span class="form-hint">Only messages from this ID are accepted.</span>
+            </div>
+
+            <h4 class="settings-subhead" style="margin-top:16px;">🌐 Platform Connection</h4>
+            <div class="form-group">
+              <label for="set-base-url">Website Base URL</label>
+              <input type="text" id="set-base-url" value="https://ace775.com" required>
+            </div>
+
+            <div class="modal-actions">
+              <button type="submit" class="btn btn-primary">
+                <span class="btn-icon">💾</span> Save System Settings
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
 
     </main>
   </div>
+
+  <!-- ====================================================================
+       MODALS (Accessible From Anywhere)
+       ==================================================================== -->
 
   <!-- Modal: Add/Edit Account -->
   <div class="modal-overlay" id="account-modal">
@@ -176,36 +482,33 @@
       </div>
       <form id="account-form" onsubmit="handleAccountSubmit(event)">
         <input type="hidden" id="form-account-id">
-        
+
         <div class="form-group">
-          <label for="form-phone">Phone Number (Ghana +233)</label>
-          <div class="input-with-prefix">
-            <span class="input-prefix">+233</span>
-            <input type="text" id="form-phone" placeholder="509295199" required autocomplete="off">
-          </div>
-          <span class="form-hint">Enter 9 digits without leading 0 or 10 digits with 0.</span>
+          <label for="form-phone">Ghana Phone Number</label>
+          <input type="text" id="form-phone" placeholder="0501234567 or 501234567" required autocomplete="username">
+          <span class="form-hint">Leading zero or country code will be formatted automatically.</span>
         </div>
 
         <div class="form-group">
-          <label for="form-password">Password</label>
-          <input type="text" id="form-password" placeholder="Account password" required autocomplete="off">
+          <label for="form-password">Account Password</label>
+          <input type="password" id="form-password" placeholder="Ace775 account password" autocomplete="current-password">
         </div>
 
         <div class="form-group">
-          <label for="form-label">Nickname / Label</label>
-          <input type="text" id="form-label" placeholder="e.g. Main Account, User 2">
+          <label for="form-label">Account Label / Friendly Name</label>
+          <input type="text" id="form-label" placeholder="e.g. John VIP4 or Main Account">
         </div>
 
         <div class="form-row">
           <div class="form-group flex-1">
-            <label for="form-mode">Mode</label>
+            <label for="form-mode">Execution Mode</label>
             <select id="form-mode">
-              <option value="api">Direct API (Recommended - Fast & Lightweight)</option>
-              <option value="browser">Playwright Headless Browser (Full SPA)</option>
+              <option value="api" selected>API Mode (High Speed)</option>
+              <option value="browser">Browser Mode (Playwright)</option>
             </select>
           </div>
           <div class="form-group flex-1">
-            <label for="form-max-tasks">Max Tasks Limit</label>
+            <label for="form-max-tasks">Task Cap</label>
             <input type="number" id="form-max-tasks" min="0" value="0" placeholder="0 = All tasks">
           </div>
         </div>
@@ -264,72 +567,7 @@
     </div>
   </div>
 
-  <!-- Modal: Settings (Scheduler, Telegram, Base URL) -->
-  <div class="modal-overlay" id="settings-modal">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3>System & Scheduler Settings</h3>
-        <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
-      </div>
-      <form id="settings-form" onsubmit="handleSettingsSubmit(event)">
-        
-        <h4 class="settings-subhead">⏰ Working Hours Auto-Scheduler</h4>
-        
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label for="set-sched-time">Daily Slot 1</label>
-            <input type="time" id="set-sched-time" value="09:00" required>
-          </div>
-          <div class="form-group flex-1">
-            <label for="set-sched-time-2">Daily Slot 2 (Optional)</label>
-            <input type="time" id="set-sched-time-2" value="" placeholder="--:--">
-          </div>
-          <div class="form-group flex-1">
-            <label for="set-retry-mins">Retry Delay (Mins)</label>
-            <input type="number" id="set-retry-mins" value="30" min="5" max="180">
-          </div>
-        </div>
-
-        <div class="form-group checkbox-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="set-sched-enabled" checked> Enable daily scheduled auto-run
-          </label>
-        </div>
-
-        <div class="form-group checkbox-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="set-auto-retry" checked> Auto-retry when "Outside working hours"
-          </label>
-        </div>
-
-        <h4 class="settings-subhead" style="margin-top:16px;">📱 Two-Way Telegram Control</h4>
-
-        <div class="form-group">
-          <label for="set-tg-token">Telegram Bot Token</label>
-          <input type="text" id="set-tg-token" placeholder="8447722246:AAG9_XVP..." autocomplete="off">
-          <span class="form-hint">From @BotFather on Telegram.</span>
-        </div>
-
-        <div class="form-group">
-          <label for="set-tg-chat">Telegram Chat ID (Authorized)</label>
-          <input type="text" id="set-tg-chat" placeholder="5511238401" autocomplete="off">
-          <span class="form-hint">Only messages from this ID are accepted.</span>
-        </div>
-
-        <div class="form-group">
-          <label for="set-base-url">Website Base URL</label>
-          <input type="text" id="set-base-url" value="https://ace775.com" required>
-        </div>
-
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Close</button>
-          <button type="submit" class="btn btn-primary">Save Settings</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Modal: Run History & Audit Log (#2) -->
+  <!-- Modal: Run History & Audit Log -->
   <div class="modal-overlay" id="history-modal">
     <div class="modal-card modal-card-wide">
       <div class="modal-header">
@@ -362,7 +600,7 @@
     </div>
   </div>
 
-  <!-- Modal: CSV Account Import (#11) -->
+  <!-- Modal: CSV Account Import -->
   <div class="modal-overlay" id="import-modal">
     <div class="modal-card">
       <div class="modal-header">
@@ -393,7 +631,7 @@
     </div>
   </div>
 
-  <!-- Modal: Manual Withdrawal (#Withdrawal) -->
+  <!-- Modal: Manual Withdrawal -->
   <div class="modal-overlay" id="withdraw-modal">
     <div class="modal-card">
       <div class="modal-header">
@@ -448,6 +686,7 @@
     </div>
   </div>
 
+  <!-- Master ES Module Entry Point -->
   <script type="module" src="/static/js/dashboard.js"></script>
 </body>
 </html>

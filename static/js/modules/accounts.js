@@ -41,23 +41,28 @@ export function updateFilterTabCounts() {
 }
 
 export function renderAccounts() {
-  const container = document.getElementById("accounts-list");
-  if (!container) return;
+  const containers = [
+    document.getElementById("accounts-list"),
+    document.getElementById("accounts-page-list")
+  ].filter(Boolean);
+
+  if (containers.length === 0) return;
 
   const list = getFilteredAccounts();
   updateFilterTabCounts();
 
   if (list.length === 0) {
     const isFiltered = state.searchQuery || state.activeFilter !== "all";
-    container.innerHTML = `
+    const emptyHtml = `
       <div class="empty-placeholder">
         ${isFiltered ? "No accounts match the current filter or search criteria." : "No accounts configured yet. Click '+ Add Account' to get started."}
       </div>
     `;
+    containers.forEach(c => c.innerHTML = emptyHtml);
     return;
   }
 
-  container.innerHTML = list.map(acc => {
+  const cardsHtml = list.map(acc => {
     const isRunning = isAccountRunning(acc.id);
     const isPaused = isAccountPaused(acc);
     const earnedToday = Number(acc.earned_today || 0).toFixed(2);
@@ -136,6 +141,8 @@ export function renderAccounts() {
       </div>
     `;
   }).join("");
+
+  containers.forEach(c => c.innerHTML = cardsHtml);
 }
 
 export async function loadAccounts() {
