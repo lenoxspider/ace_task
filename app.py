@@ -323,8 +323,9 @@ class LoginRequest(BaseModel):
 
 
 class AccountVerifyRequest(BaseModel):
+    account_id: Optional[int] = None
     phone: str
-    password: str
+    password: Optional[str] = ""
 
 
 class CsvImportRequest(BaseModel):
@@ -401,10 +402,21 @@ def get_accounts_api():
 @app.post("/api/accounts/verify")
 def verify_account_api(item: AccountVerifyRequest):
     clean_phone = db.normalize_phone(item.phone)
-    if not clean_phone or not item.password.strip():
-        raise HTTPException(status_code=400, detail="Phone number and password are required")
+    if not clean_phone:
+        raise HTTPException(status_code=400, detail="Phone number is required")
+
+    target_pwd = item.password.strip() if item.password else ""
+    # If editing an existing account and password field was left blank or is masked (e.g. ••••••••)
+    if (not target_pwd or target_pwd.startswith("•") or target_pwd.startswith("*")) and item.account_id:
+        acc = db.get_account(item.account_id, decrypt=True)
+        if acc and acc.get("password"):
+            target_pwd = acc["password"]
+
+    if not target_pwd:
+        raise HTTPException(status_code=400, detail="Password is required")
+
     base_url = db.get_setting("base_url", "https://ace775.com")
-    bot = AceApiBot(base_url=base_url, phone=clean_phone, password=item.password.strip())
+    bot = AceApiBot(base_url=base_url, phone=clean_phone, password=target_pwd)
     if bot.login():
         vip = bot.stats.get("grade", "VIP")
         bal = bot.stats.get("balance", "0.00")
@@ -477,15 +489,22 @@ def create_account_api(item: AccountCreate):
 
 @app.put("/api/accounts/{account_id}")
 def update_account_api(account_id: int, item: AccountUpdate):
-    existing = db.get_account(account_id)
+    existing = db.get_account(account_id, decrypt=True)
     if not existing:
         raise HTTPException(status_code=404, detail="Account not found")
 
     target_phone = db.normalize_phone(item.phone) if item.phone else existing["phone"]
-    target_pwd = item.password.strip() if item.password and item.password.strip() else existing["password"]
+
+    # Check if a genuine new password was provided (not masked bullets ••••••••)
+    is_new_pwd = False
+    if item.password and item.password.strip() and not item.password.startswith("•") and not item.password.startswith("*"):
+        if item.password.strip() != existing["password"]:
+            is_new_pwd = True
+
+    target_pwd = item.password.strip() if is_new_pwd else existing["password"]
 
     # If phone or password changed, verify credentials with Ace775
-    if (item.phone and target_phone != existing["phone"]) or (item.password and item.password.strip() and target_pwd != existing["password"]):
+    if (item.phone and target_phone != existing["phone"]) or is_new_pwd:
         base_url = db.get_setting("base_url", "https://ace775.com")
         bot = AceApiBot(base_url=base_url, phone=target_phone, password=target_pwd)
         if not bot.login():
@@ -509,17 +528,23 @@ def update_account_api(account_id: int, item: AccountUpdate):
             earned_today=bot.stats.get("today_earned")
         )
 
+    # For saving: don't overwrite with masked bullet password
+    save_pwd = item.password.strip() if is_new_pwd else None
+    save_pay_pwd = None
+    if item.pay_password and item.pay_password.strip() and not item.pay_password.startswith("•") and not item.pay_password.startswith("*"):
+        save_pay_pwd = item.pay_password.strip()
+
     acc = db.update_account(
         account_id=account_id,
         phone=item.phone,
-        password=item.password,
+        password=save_pwd,
         label=item.label,
         max_tasks=item.max_tasks,
         mode=item.mode,
         enabled=item.enabled,
         auto_withdraw=item.auto_withdraw,
         withdraw_amount=item.withdraw_amount,
-        pay_password=item.pay_password,
+        pay_password=save_pay_pwd,
         withdraw_wallet=item.withdraw_wallet
     )
     if not acc:

@@ -358,7 +358,8 @@ async function loadSchedulerStatus() {
 function openAccountModal(acc = null) {
   document.getElementById("form-account-id").value = acc ? acc.id : "";
   document.getElementById("form-phone").value = acc ? acc.phone : "";
-  document.getElementById("form-password").value = acc ? acc.password : "";
+  document.getElementById("form-password").value = "";
+  document.getElementById("form-password").placeholder = acc ? "•••••••• (Leave blank to keep current)" : "Ace775 account password";
   document.getElementById("form-label").value = acc ? acc.label : "";
   document.getElementById("form-mode").value = acc ? acc.mode : "api";
   document.getElementById("form-max-tasks").value = acc ? acc.max_tasks : 0;
@@ -369,7 +370,8 @@ function openAccountModal(acc = null) {
   document.getElementById("form-auto-withdraw").checked = autoW;
   document.getElementById("form-withdraw-amount").value = acc ? (acc.withdraw_amount || 0) : 0;
   document.getElementById("form-withdraw-wallet").value = acc ? (acc.withdraw_wallet || 2) : 2;
-  document.getElementById("form-pay-password").value = acc ? (acc.pay_password || "") : "";
+  document.getElementById("form-pay-password").value = "";
+  document.getElementById("form-pay-password").placeholder = acc && acc.pay_password ? "•••••• (Leave blank to keep current)" : "6-digit payment password (optional)";
   toggleAutoWithdrawFields();
 
   // Reset verification banner
@@ -405,19 +407,27 @@ function editAccount(id) {
 }
 
 async function testAccountLogins() {
+  const idInput = document.getElementById("form-account-id");
   const phoneInput = document.getElementById("form-phone");
   const pwdInput = document.getElementById("form-password");
   const statusBox = document.getElementById("account-verify-status");
   const testBtn = document.getElementById("btn-test-login");
   const modal = document.querySelector("#account-modal .modal-card");
 
+  const accId = idInput && idInput.value ? parseInt(idInput.value, 10) : null;
   const phone = phoneInput.value.trim();
   const password = pwdInput.value.trim();
 
-  if (!phone || !password) {
+  if (!phone) {
     statusBox.style.display = "flex";
     statusBox.className = "verify-status-banner verify-error";
-    statusBox.innerHTML = "⚠️ Please enter both phone number and password first.";
+    statusBox.innerHTML = "⚠️ Please enter a phone number first.";
+    return;
+  }
+  if (!password && !accId) {
+    statusBox.style.display = "flex";
+    statusBox.className = "verify-status-banner verify-error";
+    statusBox.innerHTML = "⚠️ Please enter a password.";
     return;
   }
 
@@ -430,7 +440,11 @@ async function testAccountLogins() {
     const res = await fetch("/api/accounts/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, password })
+      body: JSON.stringify({
+        account_id: accId,
+        phone: phone,
+        password: password
+      })
     });
     const data = await res.json();
     if (res.ok && data.valid) {
@@ -461,6 +475,20 @@ async function handleAccountSubmit(e) {
 
   const phone = document.getElementById("form-phone").value.trim();
   const password = document.getElementById("form-password").value.trim();
+  const payPassword = document.getElementById("form-pay-password").value.trim();
+
+  if (!phone) {
+    statusBox.style.display = "flex";
+    statusBox.className = "verify-status-banner verify-error";
+    statusBox.innerHTML = "⚠️ Please enter a phone number.";
+    return;
+  }
+  if (!id && !password) {
+    statusBox.style.display = "flex";
+    statusBox.className = "verify-status-banner verify-error";
+    statusBox.innerHTML = "⚠️ Please enter a password.";
+    return;
+  }
 
   const payload = {
     phone: phone,
@@ -472,7 +500,7 @@ async function handleAccountSubmit(e) {
     auto_withdraw: document.getElementById("form-auto-withdraw").checked ? 1 : 0,
     withdraw_amount: parseFloat(document.getElementById("form-withdraw-amount").value) || 0.0,
     withdraw_wallet: parseInt(document.getElementById("form-withdraw-wallet").value, 10) || 2,
-    pay_password: document.getElementById("form-pay-password").value.trim()
+    pay_password: payPassword
   };
 
   saveBtn.disabled = true;

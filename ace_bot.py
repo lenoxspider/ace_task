@@ -205,36 +205,48 @@ class AceApiBot:
         return {}
 
     def login(self) -> bool:
-        logger.info(f"[API] Attempting login for phone: {self.phone}...")
-        payload = {
-            "username": self.phone,
-            "password": self.password,
-            "log_type": 1,
-            "login_idx": "H5_automation_bot"
-        }
-        res = self._post("/api/Login/login", payload)
-        
-        token = None
-        if isinstance(res, dict):
-            if res.get("code") == 1 and isinstance(res.get("data"), dict):
-                token = res["data"].get("token")
-            elif "token" in res:
-                token = res.get("token")
-            elif res.get("code") == 1 and isinstance(res.get("data"), str):
-                token = res.get("data")
+        clean = self.phone.strip()
+        candidates = [clean]
+        if len(clean) == 9 and not clean.startswith("0"):
+            candidates.append(f"0{clean}")
+        elif len(clean) == 10 and clean.startswith("0"):
+            candidates.append(clean[1:])
 
-        if token:
-            self.token = token
-            self.session.headers["token"] = token
-            self.session.headers["Authorization"] = f"Bearer {token}"
-            logger.info("[API] Login successful! Token acquired.")
-            self.fetch_user_info()
-            return True
-        else:
-            msg = res.get("msg", "Unknown error or invalid credentials")
-            logger.error(f"[API] Login failed: {msg}")
-            self.stats["error"] = f"Login failed: {msg}"
-            return False
+        last_msg = ""
+        for phone_candidate in candidates:
+            logger.info(f"[API] Attempting login for phone: {phone_candidate}...")
+            payload = {
+                "username": phone_candidate,
+                "password": self.password,
+                "log_type": 1,
+                "login_idx": "H5_automation_bot"
+            }
+            res = self._post("/api/Login/login", payload)
+
+            token = None
+            if isinstance(res, dict):
+                if res.get("code") == 1 and isinstance(res.get("data"), dict):
+                    token = res["data"].get("token")
+                elif "token" in res:
+                    token = res.get("token")
+                elif res.get("code") == 1 and isinstance(res.get("data"), str):
+                    token = res.get("data")
+
+            if token:
+                self.phone = phone_candidate
+                self.token = token
+                self.session.headers["token"] = token
+                self.session.headers["Authorization"] = f"Bearer {token}"
+                logger.info(f"[API] Login successful for {phone_candidate}! Token acquired.")
+                self.fetch_user_info()
+                return True
+            else:
+                last_msg = res.get("msg", "Unknown error or invalid credentials") if isinstance(res, dict) else "No response"
+                logger.warning(f"[API] Login attempt with '{phone_candidate}' failed: {last_msg}")
+
+        logger.error(f"[API] Login failed: {last_msg}")
+        self.stats["error"] = f"Login failed: {last_msg}"
+        return False
 
     def fetch_user_info(self):
         res = self._get("/api/User/info")
