@@ -7,7 +7,7 @@ import os
 import sqlite3
 import base64
 import hashlib
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
@@ -113,13 +113,25 @@ def init_db():
         )
     """)
 
-    # Migration: ensure lifetime columns exist for existing databases
+    # Migration: ensure lifetime and withdrawal columns exist for existing databases
     cursor.execute("PRAGMA table_info(accounts)")
     columns = [col["name"] for col in cursor.fetchall()]
     if "total_tasks_done" not in columns:
         cursor.execute("ALTER TABLE accounts ADD COLUMN total_tasks_done INTEGER DEFAULT 0")
     if "total_earned_ghs" not in columns:
         cursor.execute("ALTER TABLE accounts ADD COLUMN total_earned_ghs REAL DEFAULT 0.0")
+    if "auto_withdraw" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN auto_withdraw INTEGER DEFAULT 0")
+    if "withdraw_amount" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN withdraw_amount REAL DEFAULT 0.0")
+    if "pay_password" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN pay_password TEXT DEFAULT ''")
+    if "withdraw_wallet" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN withdraw_wallet INTEGER DEFAULT 2")
+    if "last_withdraw_date" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN last_withdraw_date TEXT DEFAULT ''")
+    if "last_withdraw_status" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN last_withdraw_status TEXT DEFAULT ''")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
@@ -180,8 +192,10 @@ def get_accounts(mask_passwords: bool = True) -> List[Dict[str, Any]]:
         d = dict(r)
         if mask_passwords:
             d["password"] = "••••••••"
+            d["pay_password"] = "••••••" if d.get("pay_password") else ""
         else:
             d["password"] = decrypt_password(d.get("password", ""))
+            d["pay_password"] = decrypt_password(d.get("pay_password", ""))
         rows.append(d)
     conn.close()
     return rows
@@ -198,19 +212,23 @@ def get_account(account_id: int, decrypt: bool = True) -> Optional[Dict[str, Any
     d = dict(row)
     if decrypt:
         d["password"] = decrypt_password(d.get("password", ""))
+        d["pay_password"] = decrypt_password(d.get("pay_password", ""))
     return d
 
 
-def add_account(phone: str, password: str, label: str = "", max_tasks: int = 0, mode: str = "api", enabled: int = 1) -> Dict[str, Any]:
+def add_account(phone: str, password: str, label: str = "", max_tasks: int = 0, mode: str = "api", enabled: int = 1,
+                auto_withdraw: int = 0, withdraw_amount: float = 0.0, pay_password: str = "", withdraw_wallet: int = 2) -> Dict[str, Any]:
     clean_phone = normalize_phone(phone)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     enc_pwd = encrypt_password(password)
+    enc_pay_pwd = encrypt_password(pay_password.strip()) if pay_password and pay_password.strip() else ""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO accounts (phone, password, label, max_tasks, mode, enabled, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (clean_phone, enc_pwd, label or f"Account {clean_phone[-4:]}", max_tasks, mode, enabled, now))
+        INSERT INTO accounts (phone, password, label, max_tasks, mode, enabled, auto_withdraw, withdraw_amount, pay_password, withdraw_wallet, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (clean_phone, enc_pwd, label or f"Account {clean_phone[-4:]}", max_tasks, mode, enabled,
+          int(auto_withdraw), float(withdraw_amount), enc_pay_pwd, int(withdraw_wallet), now))
     new_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -219,7 +237,9 @@ def add_account(phone: str, password: str, label: str = "", max_tasks: int = 0, 
 
 def update_account(account_id: int, phone: Optional[str] = None, password: Optional[str] = None,
                    label: Optional[str] = None, max_tasks: Optional[int] = None,
-                   mode: Optional[str] = None, enabled: Optional[int] = None) -> Optional[Dict[str, Any]]:
+                   mode: Optional[str] = None, enabled: Optional[int] = None,
+                   auto_withdraw: Optional[int] = None, withdraw_amount: Optional[float] = None,
+                   pay_password: Optional[str] = None, withdraw_wallet: Optional[int] = None) -> Optional[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -243,6 +263,18 @@ def update_account(account_id: int, phone: Optional[str] = None, password: Optio
     if enabled is not None:
         fields.append("enabled = ?")
         values.append(enabled)
+    if auto_withdraw is not None:
+        fields.append("auto_withdraw = ?")
+        values.append(int(auto_withdraw))
+    if withdraw_amount is not None:
+        fields.append("withdraw_amount = ?")
+        values.append(float(withdraw_amount))
+    if pay_password is not None and pay_password.strip() != "":
+        fields.append("pay_password = ?")
+        values.append(encrypt_password(pay_password.strip()))
+    if withdraw_wallet is not None:
+        fields.append("withdraw_wallet = ?")
+        values.append(int(withdraw_wallet))
 
     if fields:
         values.append(account_id)
@@ -252,6 +284,39 @@ def update_account(account_id: int, phone: Optional[str] = None, password: Optio
 
     conn.close()
     return get_account(account_id, decrypt=False)
+
+
+def update_account_withdrawal_status(account_id: int, status: str, withdraw_date: Optional[str] = None):
+    """Record the latest withdrawal status and execution date."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    if withdraw_date is None:
+        withdraw_date = datetime.now().strftime("%Y-%m-%d")
+    cursor.execute("""
+        UPDATE accounts
+        SET last_withdraw_status = ?, last_withdraw_date = ?
+        WHERE id = ?
+    """, (status, withdraw_date, account_id))
+    conn.commit()
+    conn.close()
+
+
+def can_withdraw_today(account: Dict[str, Any], enforce_time_window: bool = True) -> Tuple[bool, str]:
+    """
+    Validates platform rules:
+    1. Withdrawal window is strictly 09:00 to 17:00 (9am to 5pm) local time.
+    2. Withdrawal can only occur once per calendar day per account.
+    """
+    now = datetime.now()
+    if enforce_time_window:
+        if now.hour < 9 or now.hour >= 17:
+            return False, f"Withdrawals only permitted between 09:00 and 17:00 (Current: {now.strftime('%H:%M')})"
+
+    today_str = now.strftime("%Y-%m-%d")
+    if account.get("last_withdraw_date") == today_str:
+        return False, f"Account already submitted a withdrawal today ({today_str})"
+
+    return True, "OK"
 
 
 def delete_account(account_id: int) -> bool:

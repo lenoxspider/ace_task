@@ -28,6 +28,11 @@ class TelegramCommandBot:
         chat_id = db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", "")).strip()
         return token, chat_id
 
+    @property
+    def is_configured(self) -> bool:
+        token, chat_id = self.get_token_and_chat()
+        return bool(token and chat_id)
+
     def send_message(self, text: str):
         token, chat_id = self.get_token_and_chat()
         if not token or not chat_id:

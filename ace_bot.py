@@ -123,6 +123,20 @@ class TelegramReporter:
         ]
         return self.send_message("\n".join(lines))
 
+    def send_withdrawal_alert(self, account_label: str, phone: str, amount: float, status: str, details: str = "") -> bool:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        lines = [
+            "💸 <b>Ace775 Withdrawal Alert</b>",
+            f"📅 <i>{now}</i>",
+            "",
+            f"👤 <b>Account:</b> {account_label} (<code>{phone}</code>)",
+            f"💵 <b>Amount:</b> {amount:.2f} GHS",
+            f"📊 <b>Status:</b> {status}"
+        ]
+        if details:
+            lines.append(f"ℹ️ <b>Details:</b> {details}")
+        return self.send_message("\n".join(lines))
+
 
 # ==============================================================================
 # Direct API Mode (Lightweight & Fast for Linux VPS / Local Testing)
@@ -333,6 +347,51 @@ class AceApiBot:
         logger.info(f"[API] Finished processing tasks.")
         self.fetch_user_info()
         return True
+
+    def apply_withdrawal(self, amount: float, pay_password: str, withdrawl_flag: int = 2, bypass_time_window: bool = False) -> Dict[str, Any]:
+        """
+        Submits a withdrawal request to https://ace775.com/api/Withdrawal/apply.
+        Enforces 9am - 5pm time window and checks for required parameters.
+        """
+        now = datetime.now()
+        if not bypass_time_window:
+            if now.hour < 9 or now.hour >= 17:
+                err = f"Withdrawal rejected: Outside operating hours (09:00 - 17:00). Current: {now.strftime('%H:%M')}"
+                logger.warning(f"[API] {err}")
+                return {"success": False, "message": err}
+
+        if not pay_password:
+            err = "Withdrawal rejected: Transaction payment password is not configured."
+            logger.warning(f"[API] {err}")
+            return {"success": False, "message": err}
+
+        if amount <= 0:
+            err = "Withdrawal rejected: Withdrawal amount must be greater than 0."
+            logger.warning(f"[API] {err}")
+            return {"success": False, "message": err}
+
+        if not self.token:
+            if not self.login():
+                err = "Withdrawal failed: Could not log in to Ace775."
+                logger.error(f"[API] {err}")
+                return {"success": False, "message": err}
+
+        payload = {
+            "amount": amount,
+            "pay_password": pay_password,
+            "withdrawl_flag": withdrawl_flag
+        }
+        logger.info(f"[API] Submitting withdrawal of {amount} GHS (Wallet Flag: {withdrawl_flag})...")
+        res = self._post("/api/Withdrawal/apply", payload)
+        if isinstance(res, dict) and res.get("code") == 1:
+            msg = res.get("msg", "Withdrawal applied successfully")
+            logger.info(f"[API] ✅ {msg}")
+            self.fetch_user_info()
+            return {"success": True, "message": msg, "data": res.get("data")}
+        else:
+            msg = res.get("msg", "Withdrawal application failed") if isinstance(res, dict) else "Unknown API response"
+            logger.error(f"[API] ❌ Withdrawal failed: {msg}")
+            return {"success": False, "message": msg}
 
     def run(self, do_checkin: bool = True, do_tasks: bool = True, max_tasks: Optional[int] = None) -> Dict[str, Any]:
         if not self.login():

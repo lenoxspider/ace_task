@@ -207,6 +207,39 @@
           </label>
         </div>
 
+        <!-- Auto-Withdrawal Settings -->
+        <div class="form-section-divider">
+          <span>💸 Auto-Withdrawal Configuration</span>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="form-auto-withdraw" onchange="toggleAutoWithdrawFields()"> Enable Automatic Daily Withdrawal
+          </label>
+          <span class="form-hint">Withdraws once daily between 09:00 - 17:00 after tasks complete when balance is ready.</span>
+        </div>
+
+        <div id="auto-withdraw-fields" style="display:none;">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="form-withdraw-amount">Target Amount (GHS)</label>
+              <input type="number" id="form-withdraw-amount" step="0.5" min="0" value="0" placeholder="0 = Full balance">
+            </div>
+            <div class="form-group flex-1">
+              <label for="form-withdraw-wallet">Wallet Source</label>
+              <select id="form-withdraw-wallet">
+                <option value="2">Income / Commission (Default)</option>
+                <option value="1">Personal Wallet</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="form-pay-password">Transaction PIN / Pay Password</label>
+            <input type="password" id="form-pay-password" placeholder="6-digit PIN or payment password" autocomplete="new-password">
+            <span class="form-hint">Stored encrypted. Required by Ace775 to submit withdrawals to your bound MoMo.</span>
+          </div>
+        </div>
+
         <div id="account-verify-status" class="verify-status-banner" style="display:none;"></div>
 
         <div class="modal-actions">
@@ -345,6 +378,61 @@
           <button type="button" class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
           <button type="submit" class="btn btn-primary" id="btn-submit-import">
             <span class="btn-icon">⚡</span> Verify & Import All
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Manual Withdrawal (#Withdrawal) -->
+  <div class="modal-overlay" id="withdraw-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="withdraw-modal-title">💸 Request Withdrawal</h3>
+        <button class="modal-close" onclick="closeWithdrawModal()">&times;</button>
+      </div>
+      <form id="withdraw-form" onsubmit="handleManualWithdrawSubmit(event)">
+        <input type="hidden" id="withdraw-acc-id">
+        <div class="withdraw-info-box">
+          <div class="withdraw-info-row">
+            <span>Account:</span>
+            <strong id="withdraw-account-label">-</strong>
+          </div>
+          <div class="withdraw-info-row">
+            <span>Available Balance:</span>
+            <strong id="withdraw-account-balance" style="color:var(--success);">0.00 GHS</strong>
+          </div>
+          <div class="withdraw-info-row">
+            <span>Platform Window:</span>
+            <strong style="color:var(--accent-cyan);">09:00 - 17:00 (Once Daily)</strong>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="withdraw-modal-amount">Withdrawal Amount (GHS)</label>
+          <input type="number" id="withdraw-modal-amount" step="0.5" min="1" required placeholder="Enter amount to withdraw">
+        </div>
+
+        <div class="form-group">
+          <label for="withdraw-modal-wallet">Payout Wallet</label>
+          <select id="withdraw-modal-wallet">
+            <option value="2">Income / Commission Wallet (Default)</option>
+            <option value="1">Personal Wallet</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="withdraw-modal-pin">Transaction PIN / Pay Password</label>
+          <input type="password" id="withdraw-modal-pin" placeholder="Enter payment password" required autocomplete="current-password">
+          <span class="form-hint">Required by Ace775 to verify payout to your bound MoMo account.</span>
+        </div>
+
+        <div id="withdraw-status-banner" class="verify-status-banner" style="display:none;"></div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeWithdrawModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-withdraw">
+            <span class="btn-icon">💸</span> Confirm & Submit Withdrawal
           </button>
         </div>
       </form>

@@ -137,6 +137,12 @@ function renderAccounts(list) {
               </span>
             </div>
             <span class="acc-phone">+233 ${escapeHtml(acc.phone)}</span>
+            ${acc.auto_withdraw === 1 ? `
+              <div class="acc-withdraw-tag ${acc.last_withdraw_date === new Date().toISOString().split('T')[0] ? 'withdrawn-today' : 'withdraw-ready'}">
+                💸 Auto: <strong>${acc.withdraw_amount > 0 ? acc.withdraw_amount + ' GHS' : 'Full Bal'}</strong> 
+                <span>${acc.last_withdraw_date === new Date().toISOString().split('T')[0] ? '• Done Today' : '• Ready (9am-5pm)'}</span>
+              </div>
+            ` : ''}
           </div>
         </div>
 
@@ -167,8 +173,9 @@ function renderAccounts(list) {
           <button class="btn-run ${isRunning ? 'btn-running-active' : ''}" onclick="runAccount(${acc.id})" ${isRunning ? 'disabled' : ''}>
             ${isRunning ? '<span class="spinner-dot"></span> Running...' : '▶ Run'}
           </button>
-          <button class="btn-icon-action" id="btn-refresh-${acc.id}" title="Refresh Live Balance (#1)" onclick="refreshAccountBalance(${acc.id})">🔄</button>
-          <button class="btn-icon-action" title="Execution History (#2)" onclick="openHistoryModal(${acc.id})">📜</button>
+          <button class="btn-icon-action" id="btn-refresh-${acc.id}" title="Refresh Live Balance" onclick="refreshAccountBalance(${acc.id})">🔄</button>
+          <button class="btn-icon-action" title="Request Withdrawal" onclick="openWithdrawModal(${acc.id})">💸</button>
+          <button class="btn-icon-action" title="Execution History" onclick="openHistoryModal(${acc.id})">📜</button>
           <button class="btn-icon-action" title="Edit Account" onclick="editAccount(${acc.id})">✏️</button>
           <button class="btn-icon-action btn-delete" title="Delete Account" onclick="deleteAccount(${acc.id})">🗑️</button>
         </div>
@@ -357,6 +364,14 @@ function openAccountModal(acc = null) {
   document.getElementById("form-max-tasks").value = acc ? acc.max_tasks : 0;
   document.getElementById("form-enabled").checked = acc ? Boolean(acc.enabled) : true;
 
+  // Auto-Withdrawal fields
+  const autoW = acc ? Boolean(acc.auto_withdraw) : false;
+  document.getElementById("form-auto-withdraw").checked = autoW;
+  document.getElementById("form-withdraw-amount").value = acc ? (acc.withdraw_amount || 0) : 0;
+  document.getElementById("form-withdraw-wallet").value = acc ? (acc.withdraw_wallet || 2) : 2;
+  document.getElementById("form-pay-password").value = acc ? (acc.pay_password || "") : "";
+  toggleAutoWithdrawFields();
+
   // Reset verification banner
   const statusBox = document.getElementById("account-verify-status");
   if (statusBox) {
@@ -372,6 +387,12 @@ function openAccountModal(acc = null) {
 
   document.getElementById("modal-title").innerText = acc ? "Edit Account" : "Add New Account";
   document.getElementById("account-modal").classList.add("active");
+}
+
+function toggleAutoWithdrawFields() {
+  const checked = document.getElementById("form-auto-withdraw").checked;
+  const box = document.getElementById("auto-withdraw-fields");
+  if (box) box.style.display = checked ? "block" : "none";
 }
 
 function closeAccountModal() {
@@ -447,7 +468,11 @@ async function handleAccountSubmit(e) {
     label: document.getElementById("form-label").value.trim(),
     mode: document.getElementById("form-mode").value,
     max_tasks: parseInt(document.getElementById("form-max-tasks").value, 10) || 0,
-    enabled: document.getElementById("form-enabled").checked ? 1 : 0
+    enabled: document.getElementById("form-enabled").checked ? 1 : 0,
+    auto_withdraw: document.getElementById("form-auto-withdraw").checked ? 1 : 0,
+    withdraw_amount: parseFloat(document.getElementById("form-withdraw-amount").value) || 0.0,
+    withdraw_wallet: parseInt(document.getElementById("form-withdraw-wallet").value, 10) || 2,
+    pay_password: document.getElementById("form-pay-password").value.trim()
   };
 
   saveBtn.disabled = true;
@@ -851,4 +876,85 @@ function resetIdleTimer() {
   window.addEventListener(evt, resetIdleTimer, { passive: true });
 });
 resetIdleTimer();
+
+// ==============================================================================
+// Manual & On-Demand Withdrawal Handlers
+// ==============================================================================
+function openWithdrawModal(id) {
+  const acc = accounts.find(a => a.id === id);
+  if (!acc) return;
+  document.getElementById("withdraw-acc-id").value = acc.id;
+  document.getElementById("withdraw-account-label").innerText = `${acc.label || acc.phone} (+233 ${acc.phone})`;
+  document.getElementById("withdraw-account-balance").innerText = `${acc.balance || '0.00'} GHS`;
+  const defaultAmt = acc.withdraw_amount > 0 ? acc.withdraw_amount : (parseFloat(acc.balance) || 10);
+  document.getElementById("withdraw-modal-amount").value = defaultAmt;
+  document.getElementById("withdraw-modal-wallet").value = acc.withdraw_wallet || 2;
+  document.getElementById("withdraw-modal-pin").value = "";
+
+  const statusBox = document.getElementById("withdraw-status-banner");
+  if (statusBox) {
+    statusBox.style.display = "none";
+    statusBox.className = "verify-status-banner";
+    statusBox.innerHTML = "";
+  }
+  document.getElementById("withdraw-modal").classList.add("active");
+}
+
+function closeWithdrawModal() {
+  document.getElementById("withdraw-modal").classList.remove("active");
+}
+
+async function handleManualWithdrawSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById("withdraw-acc-id").value;
+  const amount = parseFloat(document.getElementById("withdraw-modal-amount").value);
+  const wallet = parseInt(document.getElementById("withdraw-modal-wallet").value, 10) || 2;
+  const pin = document.getElementById("withdraw-modal-pin").value.trim();
+  const statusBox = document.getElementById("withdraw-status-banner");
+  const submitBtn = document.getElementById("btn-submit-withdraw");
+
+  if (!amount || amount <= 0) {
+    alert("Please enter a valid withdrawal amount.");
+    return;
+  }
+  if (!pin) {
+    alert("Please enter your transaction payment PIN / password.");
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner-dot"></span> Submitting to Ace775...';
+  statusBox.style.display = "block";
+  statusBox.className = "verify-status-banner verify-loading";
+  statusBox.innerHTML = "⏳ Submitting withdrawal request to Ace775 platform...";
+
+  try {
+    const res = await fetch(`/api/accounts/${id}/withdraw-now`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: amount,
+        pay_password: pin,
+        withdraw_wallet: wallet
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Withdrawal failed");
+
+    statusBox.className = "verify-status-banner verify-success";
+    statusBox.innerHTML = `✅ <strong>Withdrawal Submitted!</strong> ${escapeHtml(data.message || "")}`;
+    appendTerminalLog(`💸 [WITHDRAWAL] Successfully submitted ${amount} GHS for account #${id}`, "success");
+    loadAccounts();
+    loadStats();
+    setTimeout(() => {
+      closeWithdrawModal();
+    }, 1600);
+  } catch (err) {
+    statusBox.className = "verify-status-banner verify-error";
+    statusBox.innerHTML = `❌ <strong>Withdrawal Error:</strong> ${escapeHtml(err.message)}`;
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span class="btn-icon">💸</span> Confirm & Submit Withdrawal';
+  }
+}
 

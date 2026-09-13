@@ -171,6 +171,45 @@ def run_single_account(account_id: int):
         if reporter.is_configured and not stats.get("error"):
             reporter.send_report(stats)
 
+        # Automated Withdrawal Pipeline (Checked after tasks and balance update)
+        updated_account = db.get_account(account_id, decrypt=True)
+        if updated_account and updated_account.get("auto_withdraw") == 1:
+            w_amount = float(updated_account.get("withdraw_amount") or 0.0)
+            pay_pwd = updated_account.get("pay_password") or ""
+            w_flag = int(updated_account.get("withdraw_wallet") or 2)
+
+            can_w, reason = db.can_withdraw_today(updated_account)
+            if not can_w:
+                broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': {reason}", "info")
+            elif not pay_pwd:
+                broadcast_log(f"⚠️ [Auto-Withdraw] Skipped for '{label}': Transaction PIN/password not configured.", "warning")
+            else:
+                try:
+                    curr_bal = float(balance)
+                except (ValueError, TypeError):
+                    curr_bal = 0.0
+
+                if w_amount > 0 and curr_bal < w_amount:
+                    broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': Current balance ({curr_bal:.2f} GHS) below target ({w_amount:.2f} GHS).", "info")
+                else:
+                    target_withdraw = w_amount if w_amount > 0 else curr_bal
+                    if target_withdraw > 0:
+                        broadcast_log(f"💸 [Auto-Withdraw] Triggering withdrawal of {target_withdraw:.2f} GHS for '{label}'...", "info")
+                        w_bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
+                        w_res = w_bot.apply_withdrawal(amount=target_withdraw, pay_password=pay_pwd, withdrawl_flag=w_flag)
+                        if w_res.get("success"):
+                            w_msg = f"Submitted {target_withdraw:.2f} GHS"
+                            db.update_account_withdrawal_status(account_id, status=w_msg)
+                            broadcast_log(f"✅ [Auto-Withdraw] Success for '{label}': {w_msg}", "success")
+                            if reporter.is_configured:
+                                reporter.send_withdrawal_alert(label, phone, target_withdraw, "Submitted Successfully", w_res.get("message", ""))
+                        else:
+                            fail_msg = f"Failed: {w_res.get('message', 'Unknown error')}"
+                            db.update_account_withdrawal_status(account_id, status=fail_msg)
+                            broadcast_log(f"❌ [Auto-Withdraw] Failed for '{label}': {fail_msg}", "error")
+                            if reporter.is_configured:
+                                reporter.send_withdrawal_alert(label, phone, target_withdraw, "Failed", fail_msg)
+
     except Exception as e:
         err_str = str(e)
         logger.error(f"Error running account {phone}: {e}", exc_info=True)
@@ -238,6 +277,10 @@ class AccountCreate(BaseModel):
     max_tasks: Optional[int] = 0
     mode: Optional[str] = "api"
     enabled: Optional[int] = 1
+    auto_withdraw: Optional[int] = 0
+    withdraw_amount: Optional[float] = 0.0
+    pay_password: Optional[str] = ""
+    withdraw_wallet: Optional[int] = 2
 
 
 class AccountUpdate(BaseModel):
@@ -247,6 +290,17 @@ class AccountUpdate(BaseModel):
     max_tasks: Optional[int] = None
     mode: Optional[str] = None
     enabled: Optional[int] = None
+    auto_withdraw: Optional[int] = None
+    withdraw_amount: Optional[float] = None
+    pay_password: Optional[str] = None
+    withdraw_wallet: Optional[int] = None
+
+
+class WithdrawRequest(BaseModel):
+    amount: Optional[float] = None
+    pay_password: Optional[str] = None
+    withdraw_wallet: Optional[int] = None
+    bypass_time_window: Optional[bool] = False
 
 
 class SettingsUpdate(BaseModel):
@@ -390,7 +444,11 @@ def create_account_api(item: AccountCreate):
             label=item.label or "",
             max_tasks=item.max_tasks or 0,
             mode=item.mode or "api",
-            enabled=item.enabled if item.enabled is not None else 1
+            enabled=item.enabled if item.enabled is not None else 1,
+            auto_withdraw=item.auto_withdraw or 0,
+            withdraw_amount=item.withdraw_amount or 0.0,
+            pay_password=item.pay_password or "",
+            withdraw_wallet=item.withdraw_wallet if item.withdraw_wallet is not None else 2
         )
         vip = bot.stats.get("grade", "VIP")
         try:
@@ -436,7 +494,11 @@ def update_account_api(account_id: int, item: AccountUpdate):
         label=item.label,
         max_tasks=item.max_tasks,
         mode=item.mode,
-        enabled=item.enabled
+        enabled=item.enabled,
+        auto_withdraw=item.auto_withdraw,
+        withdraw_amount=item.withdraw_amount,
+        pay_password=item.pay_password,
+        withdraw_wallet=item.withdraw_wallet
     )
     if not acc:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -467,6 +529,61 @@ def refresh_account_balance_api(account_id: int):
     db.update_account_stats(account_id, vip_level=vip, balance=bal, last_status="Balance Refreshed")
     broadcast_log(f"🔄 Refreshed '{account.get('label') or account['phone']}': VIP {vip} | Balance {bal} GHS", "info")
     return db.get_account(account_id, decrypt=False)
+
+
+@app.post("/api/accounts/{account_id}/withdraw-now")
+def withdraw_account_now_api(account_id: int, item: Optional[WithdrawRequest] = None):
+    account = db.get_account(account_id, decrypt=True)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    phone = account["phone"]
+    pwd = account["password"]
+    label = account.get("label") or phone
+    base_url = db.get_setting("base_url", "https://ace775.com")
+
+    # Time and once-a-day checks
+    bypass_time = item.bypass_time_window if item else False
+    can_w, reason = db.can_withdraw_today(account, enforce_time_window=not bypass_time)
+    if not can_w:
+        raise HTTPException(status_code=400, detail=reason)
+
+    pay_pwd = (item.pay_password if item and item.pay_password else None) or account.get("pay_password")
+    if not pay_pwd:
+        raise HTTPException(status_code=400, detail="Transaction payment password is required. Please set it in Account settings.")
+
+    w_flag = (item.withdraw_wallet if item and item.withdraw_wallet is not None else None) or account.get("withdraw_wallet", 2)
+
+    amount = item.amount if item and item.amount and item.amount > 0 else float(account.get("withdraw_amount") or 0.0)
+    if amount <= 0:
+        try:
+            amount = float(account.get("balance") or 0.0)
+        except (ValueError, TypeError):
+            amount = 0.0
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Please specify a valid withdrawal amount (> 0 GHS).")
+
+    bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
+    res = bot.apply_withdrawal(amount=amount, pay_password=pay_pwd, withdrawl_flag=w_flag, bypass_time_window=bypass_time)
+
+    tg_token = db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", ""))
+    tg_chat = db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", ""))
+    reporter = TelegramReporter(bot_token=tg_token, chat_id=tg_chat)
+
+    if res.get("success"):
+        w_msg = f"Submitted {amount:.2f} GHS"
+        db.update_account_withdrawal_status(account_id, status=w_msg)
+        broadcast_log(f"💸 [Withdrawal] Manual request for '{label}': {w_msg}", "success")
+        if reporter.is_configured:
+            reporter.send_withdrawal_alert(label, phone, amount, "Submitted Successfully", res.get("message", ""))
+        return {"success": True, "message": res.get("message", "Withdrawal submitted successfully"), "account": db.get_account(account_id, decrypt=False)}
+    else:
+        fail_msg = f"Failed: {res.get('message', 'Unknown error')}"
+        db.update_account_withdrawal_status(account_id, status=fail_msg)
+        broadcast_log(f"❌ [Withdrawal] Manual request for '{label}': {fail_msg}", "error")
+        if reporter.is_configured:
+            reporter.send_withdrawal_alert(label, phone, amount, "Failed", fail_msg)
+        raise HTTPException(status_code=400, detail=res.get("message", "Withdrawal application failed"))
 
 
 @app.post("/api/accounts/import-csv")
