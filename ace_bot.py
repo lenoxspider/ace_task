@@ -167,6 +167,10 @@ class AceApiBot:
             "checkin_status": "Skipped",
             "tasks": [],
             "total_earned": 0.0,
+            "lifetime_earned": 0.0,
+            "lifetime_tasks": 0,
+            "today_earned": 0.0,
+            "tasks_done_today": 0,
             "currency": "GHS"
         }
 
@@ -272,6 +276,111 @@ class AceApiBot:
             self.stats["balance"] = display_balance
             self.stats["grade"] = grade
             logger.info(f"[API] User: {username} | VIP Level: {grade} | Personal: {personal_bal:.2f} GHS | Income: {income_bal:.2f} GHS | Usable: {display_balance} GHS")
+
+            # -------------------------------------------------------------
+            # Fetch Lifetime Earnings & Platform Statistics (/api/User/mine)
+            # -------------------------------------------------------------
+            lifetime_earned = 0.0
+            today_earned = 0.0
+            try:
+                mine_res = self._post("/api/User/mine", {})
+                if isinstance(mine_res, dict) and mine_res.get("code") == 1:
+                    mine_data = mine_res.get("data", mine_res)
+                    income_total = mine_data.get("income_total", {}) if isinstance(mine_data, dict) else {}
+                    try:
+                        lifetime_earned = float(income_total.get("total_income") or 0.0)
+                    except (ValueError, TypeError):
+                        lifetime_earned = 0.0
+                    try:
+                        today_earned = float(income_total.get("today_income") or 0.0)
+                    except (ValueError, TypeError):
+                        today_earned = 0.0
+            except Exception as e:
+                logger.warning(f"[API] Error fetching /api/User/mine: {e}")
+
+            # -------------------------------------------------------------
+            # Fetch Task Info & Daily Completion (/api/Task/index)
+            # -------------------------------------------------------------
+            tasks_today = 0
+            task_reward = 0.0
+            try:
+                task_score = usergrade.get("task_score") or usergrade.get("score")
+                if task_score:
+                    task_reward = float(task_score)
+            except (ValueError, TypeError):
+                task_reward = 0.0
+
+            try:
+                task_idx = self._get("/api/Task/index", {"page_no": 0, "type": 7, "status_flag": 0})
+                if isinstance(task_idx, dict) and task_idx.get("code") == 1:
+                    idx_data = task_idx.get("data", task_idx)
+                    if isinstance(idx_data, dict):
+                        try:
+                            tasks_today = int(idx_data.get("complete_total") or 0)
+                        except (ValueError, TypeError):
+                            tasks_today = 0
+                        t_list = idx_data.get("list", [])
+                        if t_list and isinstance(t_list, list) and task_reward <= 0:
+                            for t_item in t_list:
+                                if isinstance(t_item, dict) and t_item.get("amount"):
+                                    try:
+                                        t_amt = float(t_item.get("amount") or 0.0)
+                                        if t_amt > 0:
+                                            task_reward = t_amt
+                                            break
+                                    except (ValueError, TypeError):
+                                        pass
+            except Exception as e:
+                logger.warning(f"[API] Error fetching /api/Task/index: {e}")
+
+            # -------------------------------------------------------------
+            # Fetch Completed Task Records (/api/Task/userTaskLists)
+            # -------------------------------------------------------------
+            completed_history_count = 0
+            try:
+                history_res = self._get("/api/Task/userTaskLists", {"page_size": 200, "page_no": 1, "access_flag": 1, "type": 7})
+                if isinstance(history_res, dict):
+                    h_data = history_res.get("data", history_res)
+                    if isinstance(h_data, list):
+                        completed_history_count = len(h_data)
+                        if task_reward <= 0 and h_data:
+                            first_h = h_data[0]
+                            if isinstance(first_h, dict) and first_h.get("amount"):
+                                try:
+                                    task_reward = float(first_h.get("amount") or 0.0)
+                                except (ValueError, TypeError):
+                                    pass
+                    elif isinstance(h_data, dict) and "list" in h_data:
+                        h_list = h_data.get("list", [])
+                        completed_history_count = len(h_list)
+                        if task_reward <= 0 and h_list:
+                            first_h = h_list[0]
+                            if isinstance(first_h, dict) and first_h.get("amount"):
+                                try:
+                                    task_reward = float(first_h.get("amount") or 0.0)
+                                except (ValueError, TypeError):
+                                    pass
+            except Exception as e:
+                logger.warning(f"[API] Error fetching /api/Task/userTaskLists: {e}")
+
+            # -------------------------------------------------------------
+            # Calculate Total Lifetime Tasks
+            # -------------------------------------------------------------
+            lifetime_tasks = completed_history_count
+            if task_reward > 0 and lifetime_earned > 0:
+                calc_tasks = int(round(lifetime_earned / task_reward))
+                lifetime_tasks = max(lifetime_tasks, calc_tasks)
+            lifetime_tasks = max(lifetime_tasks, tasks_today)
+
+            self.stats["lifetime_earned"] = lifetime_earned
+            self.stats["today_earned"] = today_earned
+            self.stats["lifetime_tasks"] = lifetime_tasks
+            self.stats["tasks_done_today"] = tasks_today
+            self.stats["task_reward"] = task_reward
+            logger.info(
+                f"[API] Metrics for '{username}': Lifetime Earned: {lifetime_earned:.2f} GHS | "
+                f"Lifetime Tasks: {lifetime_tasks} | Today Earned: {today_earned:.2f} GHS | Today Tasks: {tasks_today}"
+            )
 
     def do_checkin(self) -> bool:
         logger.info("[API] Checking daily sign-in status...")

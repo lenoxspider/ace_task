@@ -720,7 +720,8 @@ async function refreshAccountBalance(id) {
     const res = await fetch(`/api/accounts/${id}/refresh-balance`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Refresh failed");
-    appendTerminalLog(`✅ Refreshed '${data.label || data.phone}': VIP ${data.vip_level} | Balance ${data.balance} GHS`, "success");
+    const ltInfo = data.total_tasks_done ? ` | Lifetime: ${data.total_tasks_done} tasks (+${Number(data.total_earned_ghs || 0).toFixed(2)} GHS)` : "";
+    appendTerminalLog(`✅ Refreshed '${data.label || data.phone}': VIP ${data.vip_level} | Balance ${data.balance} GHS${ltInfo}`, "success");
     loadAccounts();
     loadStats();
   } catch (err) {

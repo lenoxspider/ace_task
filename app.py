@@ -159,7 +159,11 @@ def run_single_account(account_id: int):
             balance=balance,
             last_status=status_msg,
             tasks_done=len(tasks),
-            earned=total_earned
+            earned=total_earned,
+            lifetime_tasks=stats.get("lifetime_tasks"),
+            lifetime_earned=stats.get("lifetime_earned"),
+            tasks_done_today=stats.get("tasks_done_today"),
+            earned_today=stats.get("today_earned")
         )
 
         broadcast_log(
@@ -455,7 +459,16 @@ def create_account_api(item: AccountCreate):
             bal = float(bot.stats.get("balance", 0.0))
         except (ValueError, TypeError):
             bal = 0.0
-        db.update_account_stats(acc["id"], vip_level=vip, balance=bal, last_status="Verified")
+        db.update_account_stats(
+            acc["id"],
+            vip_level=vip,
+            balance=bal,
+            last_status="Verified",
+            lifetime_tasks=bot.stats.get("lifetime_tasks"),
+            lifetime_earned=bot.stats.get("lifetime_earned"),
+            tasks_done_today=bot.stats.get("tasks_done_today"),
+            earned_today=bot.stats.get("today_earned")
+        )
         broadcast_log(f"Verified & added account '{acc['label']}' ({clean_phone}) - VIP: {vip}, Balance: {bal} GHS", "success")
         return db.get_account(acc["id"])
     except Exception as e:
@@ -485,7 +498,16 @@ def update_account_api(account_id: int, item: AccountUpdate):
             bal = float(bot.stats.get("balance", existing.get("balance", 0.0)))
         except (ValueError, TypeError):
             bal = existing.get("balance", 0.0)
-        db.update_account_stats(account_id, vip_level=vip, balance=bal, last_status="Verified")
+        db.update_account_stats(
+            account_id,
+            vip_level=vip,
+            balance=bal,
+            last_status="Verified",
+            lifetime_tasks=bot.stats.get("lifetime_tasks"),
+            lifetime_earned=bot.stats.get("lifetime_earned"),
+            tasks_done_today=bot.stats.get("tasks_done_today"),
+            earned_today=bot.stats.get("today_earned")
+        )
 
     acc = db.update_account(
         account_id=account_id,
@@ -526,8 +548,19 @@ def refresh_account_balance_api(account_id: int):
     except (ValueError, TypeError):
         bal = account.get("balance", 0.0)
 
-    db.update_account_stats(account_id, vip_level=vip, balance=bal, last_status="Balance Refreshed")
-    broadcast_log(f"🔄 Refreshed '{account.get('label') or account['phone']}': VIP {vip} | Balance {bal} GHS", "info")
+    db.update_account_stats(
+        account_id,
+        vip_level=vip,
+        balance=bal,
+        last_status="Balance Refreshed",
+        lifetime_tasks=bot.stats.get("lifetime_tasks"),
+        lifetime_earned=bot.stats.get("lifetime_earned"),
+        tasks_done_today=bot.stats.get("tasks_done_today"),
+        earned_today=bot.stats.get("today_earned")
+    )
+    lt_tasks = bot.stats.get("lifetime_tasks", 0)
+    lt_earned = bot.stats.get("lifetime_earned", 0.0)
+    broadcast_log(f"🔄 Refreshed '{account.get('label') or account['phone']}': VIP {vip} | Balance {bal} GHS | Lifetime: {lt_tasks} tasks (+{lt_earned:.2f} GHS)", "info")
     return db.get_account(account_id, decrypt=False)
 
 
@@ -632,7 +665,16 @@ def import_accounts_csv_api(item: CsvImportRequest):
             except (ValueError, TypeError):
                 bal = 0.0
             acc = db.add_account(phone=clean_phone, password=raw_pwd, label=label, mode=mode, max_tasks=max_tasks)
-            db.update_account_stats(acc["id"], vip_level=vip, balance=bal, last_status="Verified")
+            db.update_account_stats(
+                acc["id"],
+                vip_level=vip,
+                balance=bal,
+                last_status="Verified",
+                lifetime_tasks=bot.stats.get("lifetime_tasks"),
+                lifetime_earned=bot.stats.get("lifetime_earned"),
+                tasks_done_today=bot.stats.get("tasks_done_today"),
+                earned_today=bot.stats.get("today_earned")
+            )
             imported += 1
         except Exception as e:
             errors.append(f"Line {line_idx} ({raw_phone}): {str(e)}")

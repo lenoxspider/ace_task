@@ -359,10 +359,35 @@ def get_run_history(account_id: Optional[int] = None, limit: int = 50) -> List[D
 
 
 def update_account_stats(account_id: int, vip_level: Optional[str] = None, balance: Optional[str] = None,
-                         last_status: Optional[str] = None, tasks_done: int = 0, earned: float = 0.0):
+                         last_status: Optional[str] = None, tasks_done: int = 0, earned: float = 0.0,
+                         lifetime_tasks: Optional[int] = None, lifetime_earned: Optional[float] = None,
+                         tasks_done_today: Optional[int] = None, earned_today: Optional[float] = None):
     conn = get_connection()
     cursor = conn.cursor()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cursor.execute("SELECT tasks_done_today, earned_today, total_tasks_done, total_earned_ghs FROM accounts WHERE id = ?", (account_id,))
+    current = cursor.fetchone()
+    curr_td_today = current["tasks_done_today"] if current and current["tasks_done_today"] is not None else 0
+    curr_earned_today = current["earned_today"] if current and current["earned_today"] is not None else 0.0
+    curr_total_tasks = current["total_tasks_done"] if current and current["total_tasks_done"] is not None else 0
+    curr_total_earned = current["total_earned_ghs"] if current and current["total_earned_ghs"] is not None else 0.0
+
+    new_td_today = curr_td_today + tasks_done
+    if tasks_done_today is not None:
+        new_td_today = max(new_td_today, int(tasks_done_today))
+
+    new_earned_today = curr_earned_today + earned
+    if earned_today is not None:
+        new_earned_today = max(new_earned_today, float(earned_today))
+
+    new_total_tasks = curr_total_tasks + tasks_done
+    if lifetime_tasks is not None:
+        new_total_tasks = max(new_total_tasks, int(lifetime_tasks))
+
+    new_total_earned = curr_total_earned + earned
+    if lifetime_earned is not None:
+        new_total_earned = max(new_total_earned, float(lifetime_earned))
 
     cursor.execute("""
         UPDATE accounts SET
@@ -370,12 +395,12 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
             balance = COALESCE(?, balance),
             last_status = ?,
             last_run_time = ?,
-            tasks_done_today = tasks_done_today + ?,
-            earned_today = earned_today + ?,
-            total_tasks_done = total_tasks_done + ?,
-            total_earned_ghs = total_earned_ghs + ?
+            tasks_done_today = ?,
+            earned_today = ?,
+            total_tasks_done = ?,
+            total_earned_ghs = ?
         WHERE id = ?
-    """, (vip_level, balance, last_status, now, tasks_done, earned, tasks_done, earned, account_id))
+    """, (vip_level, balance, last_status, now, new_td_today, new_earned_today, new_total_tasks, new_total_earned, account_id))
     conn.commit()
 
     # Fetch updated account details for run history
