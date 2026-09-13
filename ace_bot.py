@@ -546,11 +546,23 @@ class AcePlaywrightBot:
         for sel in selectors:
             try:
                 el = page.locator(sel).first
-                if el.is_visible(timeout=500):
+                if el.is_visible(timeout=300):
                     el.click()
-                    page.wait_for_timeout(500)
+                    page.wait_for_timeout(300)
             except Exception:
                 pass
+
+        # If any lingering modal overlay intercepts pointer events, remove it
+        try:
+            page.evaluate("""() => {
+                document.querySelectorAll('.van-overlay').forEach(el => {
+                    if (el.offsetParent !== null) {
+                        el.style.display = 'none';
+                    }
+                });
+            }""")
+        except Exception:
+            pass
 
 
 # ==============================================================================
