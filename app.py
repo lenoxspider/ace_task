@@ -239,11 +239,11 @@ def run_single_account(account_id: int):
                             available_bal = 0.0
                     wallet_name = "Personal Wallet"
 
-                ALLOWED_DENOMINATIONS = [20, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000]
-                MIN_PLATFORM_AMOUNT = 20.0
+                ALLOWED_DENOMINATIONS = [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
+                MIN_PLATFORM_AMOUNT = 65.0
 
                 if w_amount > 0:
-                    # User picked a specific fixed amount (e.g. 50 GHS)
+                    # User picked a specific fixed amount (e.g. 65 GHS, 170 GHS, 525 GHS, 1600 GHS)
                     if available_bal < w_amount:
                         status_note = f"Holding: {wallet_name} {available_bal:.2f} < Target {w_amount:.2f} GHS"
                         db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
@@ -268,12 +268,12 @@ def run_single_account(account_id: int):
                 else:
                     # w_amount == 0: Full Balance / Auto-Max Allowed
                     if available_bal < MIN_PLATFORM_AMOUNT:
-                        status_note = f"Holding: {wallet_name} {available_bal:.2f} < Min 20 GHS"
+                        status_note = f"Holding: {wallet_name} {available_bal:.2f} < Min 65 GHS"
                         db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
-                        broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': {wallet_name} balance ({available_bal:.2f} GHS) is below platform minimum (20 GHS). Waiting for tasks to accumulate.", "info")
+                        broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': {wallet_name} balance ({available_bal:.2f} GHS) is below platform minimum (65 GHS). Waiting for tasks to accumulate.", "info")
                     else:
                         # Select highest platform denomination <= available_bal
-                        target_withdraw = 20.0
+                        target_withdraw = 65.0
                         for tier in reversed(ALLOWED_DENOMINATIONS):
                             if available_bal >= tier:
                                 target_withdraw = float(tier)
@@ -779,8 +779,8 @@ def withdraw_account_now_api(account_id: int, item: Optional[WithdrawRequest] = 
     if amount <= 0:
         amount = available_bal
 
-    if amount < 20.0:
-        raise HTTPException(status_code=400, detail=f"Minimum platform withdrawal is 20 GHS. Current {wallet_name} balance is {available_bal:.2f} GHS.")
+    if amount < 65.0:
+        raise HTTPException(status_code=400, detail=f"Minimum platform withdrawal is 65 GHS. Current {wallet_name} balance is {available_bal:.2f} GHS.")
 
     if available_bal < amount:
         raise HTTPException(status_code=400, detail=f"Insufficient funds: {wallet_name} balance ({available_bal:.2f} GHS) is less than requested withdrawal amount ({amount:.2f} GHS).")

@@ -404,34 +404,38 @@
               <label for="withdraw-page-fixed-amount">Select Fixed Auto-Payout Amount (GHS)</label>
               <select id="withdraw-page-fixed-amount" onchange="syncWithdrawPagePills(this.value)">
                 <option value="0">Full Balance / Auto-Max Allowed (Default)</option>
-                <option value="20">20 GHS</option>
-                <option value="50">50 GHS</option>
-                <option value="100">100 GHS</option>
-                <option value="200">200 GHS</option>
-                <option value="300">300 GHS</option>
-                <option value="500">500 GHS</option>
-                <option value="1000">1,000 GHS</option>
-                <option value="2000">2,000 GHS</option>
-                <option value="3000">3,000 GHS</option>
-                <option value="5000">5,000 GHS</option>
+                <option value="65">65 GHS</option>
+                <option value="170">170 GHS</option>
+                <option value="525">525 GHS</option>
+                <option value="1600">1,600 GHS</option>
+                <option value="4500">4,500 GHS</option>
+                <option value="14000">14,000 GHS</option>
+                <option value="33500">33,500 GHS</option>
+                <option value="65000">65,000 GHS</option>
+                <option value="150000">150,000 GHS</option>
+                <option value="200000">200,000 GHS</option>
+                <option value="500000">500,000 GHS</option>
+                <option value="1000000">1,000,000 GHS</option>
               </select>
 
               <div class="quick-amounts-grid" id="withdraw-page-pills-grid">
                 <button type="button" class="amount-pill active" onclick="selectWithdrawPageAmount(0)">Full Bal</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(20)">20</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(50)">50</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(100)">100</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(200)">200</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(300)">300</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(500)">500</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(1000)">1000</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(2000)">2000</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(3000)">3000</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(5000)">5000</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(65)">65</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(170)">170</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(525)">525</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(1600)">1600</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(4500)">4500</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(14000)">14000</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(33500)">33500</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(65000)">65000</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(150000)">150000</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(200000)">200000</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(500000)">500000</button>
+                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(1000000)">1000000</button>
               </div>
-              <span class="form-hint">Ace775 requires fixed amounts only. Tap any denomination button or select from the dropdown.</span>
+              <span class="form-hint">Ace775 exact denominations. Tap any amount button or select from the dropdown.</span>
               <span class="form-hint" style="color:var(--accent-cyan); display:block; margin-top:6px;">
-                💡 <strong>Income Wallet Guard:</strong> Automatic withdrawals are drawn strictly from your <strong>Income Wallet</strong> (task commissions). If balance is below your chosen fixed tier (or below the 20 GHS platform minimum), the bot safely waits without errors until tasks accumulate sufficient funds.
+                💡 <strong>Income Wallet Guard:</strong> Automatic withdrawals are drawn strictly from your <strong>Income Wallet</strong> (task commissions). If balance is below your chosen fixed tier (or below the 65 GHS platform minimum), the bot safely waits without errors until tasks accumulate sufficient funds.
               </span>
             </div>
 
@@ -626,29 +630,33 @@
               <label for="form-withdraw-amount">Fixed Auto-Payout Amount (GHS)</label>
               <select id="form-withdraw-amount" onchange="syncFormWithdrawPills(this.value)">
                 <option value="0">Full Balance / Auto (Default)</option>
-                <option value="20">20 GHS</option>
-                <option value="50">50 GHS</option>
-                <option value="100">100 GHS</option>
-                <option value="200">200 GHS</option>
-                <option value="300">300 GHS</option>
-                <option value="500">500 GHS</option>
-                <option value="1000">1,000 GHS</option>
-                <option value="2000">2,000 GHS</option>
-                <option value="3000">3,000 GHS</option>
-                <option value="5000">5,000 GHS</option>
+                <option value="65">65 GHS</option>
+                <option value="170">170 GHS</option>
+                <option value="525">525 GHS</option>
+                <option value="1600">1,600 GHS</option>
+                <option value="4500">4,500 GHS</option>
+                <option value="14000">14,000 GHS</option>
+                <option value="33500">33,500 GHS</option>
+                <option value="65000">65,000 GHS</option>
+                <option value="150000">150,000 GHS</option>
+                <option value="200000">200,000 GHS</option>
+                <option value="500000">500,000 GHS</option>
+                <option value="1000000">1,000,000 GHS</option>
               </select>
               <div class="quick-amounts-grid" id="form-withdraw-pills-grid">
                 <button type="button" class="amount-pill active" onclick="selectFormWithdrawAmount(0)">Full Bal</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(20)">20</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(50)">50</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(100)">100</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(200)">200</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(300)">300</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(500)">500</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(1000)">1000</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(2000)">2000</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(3000)">3000</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(5000)">5000</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(65)">65</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(170)">170</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(525)">525</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(1600)">1600</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(4500)">4500</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(14000)">14000</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(33500)">33500</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(65000)">65000</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(150000)">150000</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(200000)">200000</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(500000)">500000</button>
+                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(1000000)">1000000</button>
               </div>
               <span class="form-hint">Ace775 platform only processes fixed denominations. Tap to select.</span>
             </div>
@@ -773,28 +781,32 @@
         <div class="form-group">
           <label for="withdraw-modal-amount">Select Allowed Fixed Amount (GHS)</label>
           <select id="withdraw-modal-amount" onchange="syncWithdrawPills(this.value)">
-            <option value="20">20 GHS</option>
-            <option value="50" selected>50 GHS</option>
-            <option value="100">100 GHS</option>
-            <option value="200">200 GHS</option>
-            <option value="300">300 GHS</option>
-            <option value="500">500 GHS</option>
-            <option value="1000">1,000 GHS</option>
-            <option value="2000">2,000 GHS</option>
-            <option value="3000">3,000 GHS</option>
-            <option value="5000">5,000 GHS</option>
+            <option value="65" selected>65 GHS</option>
+            <option value="170">170 GHS</option>
+            <option value="525">525 GHS</option>
+            <option value="1600">1,600 GHS</option>
+            <option value="4500">4,500 GHS</option>
+            <option value="14000">14,000 GHS</option>
+            <option value="33500">33,500 GHS</option>
+            <option value="65000">65,000 GHS</option>
+            <option value="150000">150,000 GHS</option>
+            <option value="200000">200,000 GHS</option>
+            <option value="500000">500,000 GHS</option>
+            <option value="1000000">1,000,000 GHS</option>
           </select>
           <div class="quick-amounts-grid" id="withdraw-pills-grid">
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(20)">20</button>
-            <button type="button" class="amount-pill active" onclick="selectWithdrawAmount(50)">50</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(100)">100</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(200)">200</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(300)">300</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(500)">500</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(1000)">1000</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(2000)">2000</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(3000)">3000</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(5000)">5000</button>
+            <button type="button" class="amount-pill active" onclick="selectWithdrawAmount(65)">65</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(170)">170</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(525)">525</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(1600)">1600</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(4500)">4500</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(14000)">14000</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(33500)">33500</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(65000)">65000</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(150000)">150000</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(200000)">200000</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(500000)">500000</button>
+            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(1000000)">1000000</button>
           </div>
           <span class="form-hint">Tap any denomination to select. Ace775 rejects custom amounts.</span>
         </div>

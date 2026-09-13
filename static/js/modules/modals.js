@@ -259,8 +259,8 @@ export function openWithdrawModal(accountId = null) {
   document.getElementById("withdraw-account-balance").innerText = `${incBal.toFixed(2)} GHS (Income Wallet)`;
 
   // Select best matching fixed denomination from available Income balance
-  const fixedDenominations = [20, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000];
-  let defaultAmount = 20;
+  const fixedDenominations = [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000];
+  let defaultAmount = 65;
   for (let i = fixedDenominations.length - 1; i >= 0; i--) {
     if (incBal >= fixedDenominations[i]) {
       defaultAmount = fixedDenominations[i];
