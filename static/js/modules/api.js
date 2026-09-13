@@ -70,6 +70,13 @@ export const api = {
     return data;
   },
 
+  getWithdrawalOptions: async (accountId, refresh = false) => {
+    const res = await request(`/api/accounts/${accountId}/withdrawal-options${refresh ? '?refresh=true' : ''}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || data.message || "Failed to fetch withdrawal options");
+    return data;
+  },
+
   verifyLogin: async (payload) => {
     const res = await request("/api/accounts/verify", {
       method: "POST",

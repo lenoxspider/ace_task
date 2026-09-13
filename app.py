@@ -184,6 +184,8 @@ def run_single_account(account_id: int):
             balance=balance,
             income_balance=inc_bal,
             personal_balance=pers_bal,
+            withdrawal_amounts=stats.get("withdrawal_amounts"),
+            withdrawal_fee=stats.get("withdrawal_fee"),
             last_status=status_msg,
             tasks_done=len(tasks),
             earned=total_earned,
@@ -239,11 +241,12 @@ def run_single_account(account_id: int):
                             available_bal = 0.0
                     wallet_name = "Personal Wallet"
 
-                ALLOWED_DENOMINATIONS = [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
-                MIN_PLATFORM_AMOUNT = 65.0
+                raw_denominations = updated_account.get("withdrawal_amounts") or [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
+                allowed_denominations = sorted([float(x) for x in raw_denominations])
+                min_platform_amount = allowed_denominations[0] if allowed_denominations else 65.0
 
                 if w_amount > 0:
-                    # User picked a specific fixed amount (e.g. 65 GHS, 170 GHS, 525 GHS, 1600 GHS)
+                    # User picked a specific fixed amount matching an allowed tier
                     if available_bal < w_amount:
                         status_note = f"Holding: {wallet_name} {available_bal:.2f} < Target {w_amount:.2f} GHS"
                         db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
@@ -267,14 +270,14 @@ def run_single_account(account_id: int):
                                 reporter.send_withdrawal_alert(label, phone, target_withdraw, "Failed", fail_msg)
                 else:
                     # w_amount == 0: Full Balance / Auto-Max Allowed
-                    if available_bal < MIN_PLATFORM_AMOUNT:
-                        status_note = f"Holding: {wallet_name} {available_bal:.2f} < Min 65 GHS"
+                    if available_bal < min_platform_amount:
+                        status_note = f"Holding: {wallet_name} {available_bal:.2f} < Min {min_platform_amount:.2f} GHS"
                         db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
-                        broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': {wallet_name} balance ({available_bal:.2f} GHS) is below platform minimum (65 GHS). Waiting for tasks to accumulate.", "info")
+                        broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': {wallet_name} balance ({available_bal:.2f} GHS) is below platform minimum ({min_platform_amount:.2f} GHS). Waiting for tasks to accumulate.", "info")
                     else:
                         # Select highest platform denomination <= available_bal
-                        target_withdraw = 65.0
-                        for tier in reversed(ALLOWED_DENOMINATIONS):
+                        target_withdraw = min_platform_amount
+                        for tier in reversed(allowed_denominations):
                             if available_bal >= tier:
                                 target_withdraw = float(tier)
                                 break
@@ -510,12 +513,35 @@ def verify_account_api(item: AccountVerifyRequest):
     if bot.login():
         vip = bot.stats.get("grade", "VIP")
         bal = bot.stats.get("balance", "0.00")
+        inc_bal = float(bot.stats.get("income_balance") or 0.0)
+        pers_bal = float(bot.stats.get("personal_balance") or 0.0)
+        w_amts = bot.stats.get("withdrawal_amounts") or [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
+        w_fee = float(bot.stats.get("withdrawal_fee") or 0.0)
+
+        # If existing account ID provided, update database stats immediately
+        if item.account_id:
+            db.update_account_stats(
+                item.account_id,
+                vip_level=vip,
+                balance=bal,
+                income_balance=inc_bal,
+                personal_balance=pers_bal,
+                withdrawal_amounts=w_amts,
+                withdrawal_fee=w_fee,
+                lifetime_tasks=bot.stats.get("lifetime_tasks"),
+                lifetime_earned=bot.stats.get("lifetime_earned")
+            )
+
         return {
             "valid": True,
             "phone": clean_phone,
             "vip_level": vip,
             "balance": bal,
-            "message": f"Logins verified successfully! VIP: {vip} | Balance: {bal} GHS"
+            "income_balance": inc_bal,
+            "personal_balance": pers_bal,
+            "withdrawal_amounts": w_amts,
+            "withdrawal_fee": w_fee,
+            "message": f"Logins verified successfully! VIP: {vip} | Income: {inc_bal:.2f} GHS | Fee: {w_fee}%"
         }
     else:
         err = bot.stats.get("error", "Login failed. Please check credentials.")
@@ -565,6 +591,10 @@ def create_account_api(item: AccountCreate):
             acc["id"],
             vip_level=vip,
             balance=bal,
+            income_balance=float(bot.stats.get("income_balance") or 0.0),
+            personal_balance=float(bot.stats.get("personal_balance") or 0.0),
+            withdrawal_amounts=bot.stats.get("withdrawal_amounts"),
+            withdrawal_fee=bot.stats.get("withdrawal_fee"),
             last_status="Verified",
             lifetime_tasks=bot.stats.get("lifetime_tasks"),
             lifetime_earned=bot.stats.get("lifetime_earned"),
@@ -622,6 +652,8 @@ def update_account_api(account_id: int, item: AccountUpdate):
             balance=bal,
             income_balance=inc_bal,
             personal_balance=pers_bal,
+            withdrawal_amounts=bot.stats.get("withdrawal_amounts"),
+            withdrawal_fee=bot.stats.get("withdrawal_fee"),
             last_status="Verified",
             lifetime_tasks=bot.stats.get("lifetime_tasks"),
             lifetime_earned=bot.stats.get("lifetime_earned"),
@@ -718,6 +750,8 @@ def refresh_account_balance_api(account_id: int):
         balance=bal,
         income_balance=inc_bal,
         personal_balance=pers_bal,
+        withdrawal_amounts=bot.stats.get("withdrawal_amounts"),
+        withdrawal_fee=bot.stats.get("withdrawal_fee"),
         last_status="Balance Refreshed",
         lifetime_tasks=bot.stats.get("lifetime_tasks"),
         lifetime_earned=bot.stats.get("lifetime_earned"),
@@ -728,6 +762,64 @@ def refresh_account_balance_api(account_id: int):
     lt_earned = bot.stats.get("lifetime_earned", 0.0)
     broadcast_log(f"🔄 Refreshed '{account.get('label') or account['phone']}': VIP {vip} | Balance {bal} GHS (Income: {inc_bal:.2f} GHS) | Lifetime: {lt_tasks} tasks (+{lt_earned:.2f} GHS)", "info")
     return db.get_account(account_id, decrypt=False)
+
+
+@app.get("/api/accounts/{account_id}/withdrawal-options")
+def get_account_withdrawal_options_api(account_id: int, refresh: bool = False):
+    """
+    Dynamically fetches or reads the exact withdrawal amounts and platform fee
+    allowed for this specific account's VIP grade on Ace775.
+    """
+    account = db.get_account(account_id, decrypt=True)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    w_amts = account.get("withdrawal_amounts") or []
+    # If refresh is requested or if account doesn't have tiers saved yet, fetch live from Ace775
+    if refresh or not w_amts or len(w_amts) <= 1:
+        base_url = db.get_setting("base_url", "https://ace775.com")
+        bot = AceApiBot(base_url=base_url, phone=account["phone"], password=account["password"])
+        if bot.login():
+            vip = bot.stats.get("grade", account.get("vip_level", "VIP"))
+            w_amts = bot.stats.get("withdrawal_amounts") or [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
+            w_fee = float(bot.stats.get("withdrawal_fee") or 0.0)
+            inc_bal = float(bot.stats.get("income_balance") or 0.0)
+            pers_bal = float(bot.stats.get("personal_balance") or 0.0)
+            bal = float(bot.stats.get("balance") or 0.0)
+            db.update_account_stats(
+                account_id,
+                vip_level=vip,
+                balance=bal,
+                income_balance=inc_bal,
+                personal_balance=pers_bal,
+                withdrawal_amounts=w_amts,
+                withdrawal_fee=w_fee,
+                lifetime_tasks=bot.stats.get("lifetime_tasks"),
+                lifetime_earned=bot.stats.get("lifetime_earned"),
+                tasks_done_today=bot.stats.get("tasks_done_today"),
+                earned_today=bot.stats.get("today_earned")
+            )
+            account = db.get_account(account_id, decrypt=False)
+
+    min_w = w_amts[0] if w_amts else 65.0
+    return {
+        "ok": True,
+        "account_id": account_id,
+        "phone": account["phone"],
+        "label": account.get("label") or account["phone"],
+        "vip_level": account.get("vip_level") or "N/A",
+        "income_balance": float(account.get("income_balance") or 0.0),
+        "personal_balance": float(account.get("personal_balance") or 0.0),
+        "total_balance": float(account.get("balance") or 0.0),
+        "withdrawal_amounts": w_amts,
+        "withdrawal_fee": float(account.get("withdrawal_fee") or 0.0),
+        "min_amount": min_w,
+        "auto_withdraw": account.get("auto_withdraw", 0),
+        "configured_withdraw_amount": float(account.get("withdraw_amount") or 0.0),
+        "withdraw_wallet": int(account.get("withdraw_wallet") or 2),
+        "last_withdraw_status": account.get("last_withdraw_status", ""),
+        "last_withdraw_date": account.get("last_withdraw_date", "")
+    }
 
 
 @app.post("/api/accounts/{account_id}/withdraw-now")
@@ -775,12 +867,16 @@ def withdraw_account_now_api(account_id: int, item: Optional[WithdrawRequest] = 
                 available_bal = 0.0
         wallet_name = "Personal Wallet"
 
+    raw_denominations = account.get("withdrawal_amounts") or [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
+    allowed_denominations = sorted([float(x) for x in raw_denominations])
+    min_amount = allowed_denominations[0] if allowed_denominations else 65.0
+
     amount = item.amount if item and item.amount and item.amount > 0 else float(account.get("withdraw_amount") or 0.0)
     if amount <= 0:
         amount = available_bal
 
-    if amount < 65.0:
-        raise HTTPException(status_code=400, detail=f"Minimum platform withdrawal is 65 GHS. Current {wallet_name} balance is {available_bal:.2f} GHS.")
+    if amount < min_amount:
+        raise HTTPException(status_code=400, detail=f"Minimum platform withdrawal for this VIP level is {min_amount:.2f} GHS. Current {wallet_name} balance is {available_bal:.2f} GHS.")
 
     if available_bal < amount:
         raise HTTPException(status_code=400, detail=f"Insufficient funds: {wallet_name} balance ({available_bal:.2f} GHS) is less than requested withdrawal amount ({amount:.2f} GHS).")

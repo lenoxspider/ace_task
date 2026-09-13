@@ -376,7 +376,10 @@
           <form id="paged-auto-withdraw-form" onsubmit="handlePagedAutoWithdrawSubmit(event)" style="padding:16px 20px;">
             <div class="form-row">
               <div class="form-group flex-1">
-                <label for="withdraw-page-acc-select">Target Account</label>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                  <label for="withdraw-page-acc-select" style="margin-bottom:0;">Target Account</label>
+                  <button type="button" id="btn-sync-withdraw-tiers" class="btn btn-xs btn-secondary" onclick="refreshAccountWithdrawalOptions()" style="font-size:0.75rem; padding:2px 8px;" title="Fetch latest dynamic withdrawal tiers for this account from Ace775">🔄 Sync Tiers from Ace775</button>
+                </div>
                 <select id="withdraw-page-acc-select" onchange="onWithdrawPageAccountChange()" required>
                   <option value="">-- Choose Account to Configure --</option>
                 </select>

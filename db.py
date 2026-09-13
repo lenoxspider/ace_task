@@ -136,6 +136,10 @@ def init_db():
         cursor.execute("ALTER TABLE accounts ADD COLUMN income_balance REAL DEFAULT 0.0")
     if "personal_balance" not in columns:
         cursor.execute("ALTER TABLE accounts ADD COLUMN personal_balance REAL DEFAULT 0.0")
+    if "withdrawal_amounts" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN withdrawal_amounts TEXT DEFAULT ''")
+    if "withdrawal_fee" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN withdrawal_fee REAL DEFAULT 0.0")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
@@ -187,6 +191,30 @@ def init_db():
     conn.close()
 
 
+DEFAULT_DENOMINATIONS = [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
+
+
+def _parse_withdrawal_amounts(val: Any) -> List[float]:
+    if not val:
+        return list(DEFAULT_DENOMINATIONS)
+    if isinstance(val, (list, tuple)):
+        return [int(x) if float(x).is_integer() else float(x) for x in val]
+    if isinstance(val, str):
+        val = val.strip()
+        if not val:
+            return list(DEFAULT_DENOMINATIONS)
+        parts = [p.strip() for p in (val.split("|") if "|" in val else val.split(","))]
+        res = []
+        for p in parts:
+            try:
+                num = float(p)
+                res.append(int(num) if num.is_integer() else num)
+            except ValueError:
+                pass
+        return res if res else list(DEFAULT_DENOMINATIONS)
+    return list(DEFAULT_DENOMINATIONS)
+
+
 def get_accounts(mask_passwords: bool = True) -> List[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.cursor()
@@ -200,6 +228,8 @@ def get_accounts(mask_passwords: bool = True) -> List[Dict[str, Any]]:
         else:
             d["password"] = decrypt_password(d.get("password", ""))
             d["pay_password"] = decrypt_password(d.get("pay_password", ""))
+        d["withdrawal_amounts"] = _parse_withdrawal_amounts(d.get("withdrawal_amounts"))
+        d["withdrawal_fee"] = float(d.get("withdrawal_fee") or 0.0)
         rows.append(d)
     conn.close()
     return rows
@@ -217,6 +247,8 @@ def get_account(account_id: int, decrypt: bool = True) -> Optional[Dict[str, Any
     if decrypt:
         d["password"] = decrypt_password(d.get("password", ""))
         d["pay_password"] = decrypt_password(d.get("pay_password", ""))
+    d["withdrawal_amounts"] = _parse_withdrawal_amounts(d.get("withdrawal_amounts"))
+    d["withdrawal_fee"] = float(d.get("withdrawal_fee") or 0.0)
     return d
 
 
@@ -372,7 +404,8 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
                          income_balance: Optional[float] = None, personal_balance: Optional[float] = None,
                          last_status: Optional[str] = None, tasks_done: int = 0, earned: float = 0.0,
                          lifetime_tasks: Optional[int] = None, lifetime_earned: Optional[float] = None,
-                         tasks_done_today: Optional[int] = None, earned_today: Optional[float] = None):
+                         tasks_done_today: Optional[int] = None, earned_today: Optional[float] = None,
+                         withdrawal_amounts: Optional[Any] = None, withdrawal_fee: Optional[float] = None):
     conn = get_connection()
     cursor = conn.cursor()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -400,12 +433,22 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
     if lifetime_earned is not None:
         new_total_earned = max(new_total_earned, float(lifetime_earned))
 
+    # Format withdrawal amounts if provided
+    w_amts_str = None
+    if withdrawal_amounts is not None:
+        if isinstance(withdrawal_amounts, (list, tuple)):
+            w_amts_str = "|".join(str(x) for x in withdrawal_amounts)
+        elif isinstance(withdrawal_amounts, str):
+            w_amts_str = withdrawal_amounts
+
     cursor.execute("""
         UPDATE accounts SET
             vip_level = COALESCE(?, vip_level),
             balance = COALESCE(?, balance),
             income_balance = COALESCE(?, income_balance),
             personal_balance = COALESCE(?, personal_balance),
+            withdrawal_amounts = COALESCE(?, withdrawal_amounts),
+            withdrawal_fee = COALESCE(?, withdrawal_fee),
             last_status = ?,
             last_run_time = ?,
             tasks_done_today = ?,
@@ -413,7 +456,7 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
             total_tasks_done = ?,
             total_earned_ghs = ?
         WHERE id = ?
-    """, (vip_level, balance, income_balance, personal_balance, last_status, now, new_td_today, new_earned_today, new_total_tasks, new_total_earned, account_id))
+    """, (vip_level, balance, income_balance, personal_balance, w_amts_str, withdrawal_fee, last_status, now, new_td_today, new_earned_today, new_total_tasks, new_total_earned, account_id))
     conn.commit()
 
     # Fetch updated account details for run history

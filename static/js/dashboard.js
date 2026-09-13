@@ -40,6 +40,7 @@ import {
   selectWithdrawPageAmount,
   syncWithdrawPagePills,
   onWithdrawPageAccountChange,
+  refreshAccountWithdrawalOptions,
   configureAutoWithdrawForAccount,
   handlePagedAutoWithdrawSubmit,
   openHistoryModal,
@@ -88,6 +89,7 @@ window.syncFormWithdrawPills = syncFormWithdrawPills;
 window.selectWithdrawPageAmount = selectWithdrawPageAmount;
 window.syncWithdrawPagePills = syncWithdrawPagePills;
 window.onWithdrawPageAccountChange = onWithdrawPageAccountChange;
+window.refreshAccountWithdrawalOptions = refreshAccountWithdrawalOptions;
 window.configureAutoWithdrawForAccount = configureAutoWithdrawForAccount;
 window.handlePagedAutoWithdrawSubmit = handlePagedAutoWithdrawSubmit;
 

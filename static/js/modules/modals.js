@@ -26,8 +26,20 @@ export function openAccountModal(acc = null) {
   const autoW = acc ? Boolean(acc.auto_withdraw) : false;
   document.getElementById("form-auto-withdraw").checked = autoW;
   const wAmt = acc ? (acc.withdraw_amount || 0) : 0;
-  document.getElementById("form-withdraw-amount").value = String(wAmt);
-  syncFormWithdrawPills(wAmt);
+
+  const allowedTiers = acc && acc.withdrawal_amounts && acc.withdrawal_amounts.length > 0
+    ? acc.withdrawal_amounts
+    : DEFAULT_PLATFORM_DENOMINATIONS;
+
+  renderDynamicAmountGrid({
+    selectId: "form-withdraw-amount",
+    gridId: "form-withdraw-pills-grid",
+    amounts: allowedTiers,
+    selectedAmount: wAmt,
+    includeAutoMax: true,
+    onClickFnName: "selectFormWithdrawAmount"
+  });
+
   document.getElementById("form-withdraw-wallet").value = acc ? (acc.withdraw_wallet || 2) : 2;
   document.getElementById("form-pay-password").value = "";
   document.getElementById("form-pay-password").placeholder = acc && acc.pay_password ? "•••••• (Leave blank to keep current)" : "6-digit payment password (optional)";
@@ -91,7 +103,7 @@ export async function testAccountLogins() {
   testBtn.innerHTML = '<span class="btn-icon">⏳</span> Testing...';
   statusBox.style.display = "flex";
   statusBox.className = "verify-status-banner verify-loading";
-  statusBox.innerHTML = "⏳ Connecting to Ace775 to verify credentials...";
+  statusBox.innerHTML = "⏳ Connecting to Ace775 to verify credentials & fetch level tiers...";
 
   try {
     const data = await api.verifyLogin({
@@ -99,8 +111,20 @@ export async function testAccountLogins() {
       password: password,
       account_id: id ? parseInt(id, 10) : null
     });
+
+    if (data.withdrawal_amounts && data.withdrawal_amounts.length > 0) {
+      renderDynamicAmountGrid({
+        selectId: "form-withdraw-amount",
+        gridId: "form-withdraw-pills-grid",
+        amounts: data.withdrawal_amounts,
+        selectedAmount: document.getElementById("form-withdraw-amount").value || 0,
+        includeAutoMax: true,
+        onClickFnName: "selectFormWithdrawAmount"
+      });
+    }
+
     statusBox.className = "verify-status-banner verify-success";
-    statusBox.innerHTML = `✅ <strong>Login Success!</strong> VIP Level: ${escapeHtml(data.vip_level || 'VIP')} | Balance: ${data.balance || '0.00'} GHS`;
+    statusBox.innerHTML = `✅ <strong>Login Success!</strong> VIP Level: ${escapeHtml(data.vip_level || 'VIP')} | Income: ${Number(data.income_balance || 0).toFixed(2)} GHS | Fee: ${data.withdrawal_fee || 0}% (${(data.withdrawal_amounts || []).length} tiers loaded)`;
   } catch (err) {
     statusBox.className = "verify-status-banner verify-error";
     statusBox.innerHTML = `❌ <strong>Verification Failed:</strong> ${escapeHtml(err.message)}`;
@@ -172,8 +196,50 @@ export async function handleAccountSubmit(e) {
 }
 
 /* ==============================================================================
-   2. Fixed Amount Denominations & Selection Helpers
+   2. Dynamic Amount Denominations & Selection Helpers
    ============================================================================== */
+export const DEFAULT_PLATFORM_DENOMINATIONS = [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000];
+
+export function renderDynamicAmountGrid({
+  selectId,
+  gridId,
+  amounts = DEFAULT_PLATFORM_DENOMINATIONS,
+  selectedAmount = 0,
+  includeAutoMax = true,
+  onClickFnName = "selectWithdrawPageAmount"
+}) {
+  const select = document.getElementById(selectId);
+  const grid = document.getElementById(gridId);
+
+  const raw = (amounts && amounts.length > 0 ? amounts : DEFAULT_PLATFORM_DENOMINATIONS);
+  const numAmounts = [...new Set(raw.map(Number))].filter(n => !isNaN(n) && n > 0).sort((a, b) => a - b);
+
+  if (select) {
+    let optionsHtml = "";
+    if (includeAutoMax) {
+      optionsHtml += `<option value="0">Full Balance / Auto-Max Allowed (Default)</option>`;
+    }
+    numAmounts.forEach(amt => {
+      optionsHtml += `<option value="${amt}">${amt.toLocaleString()} GHS</option>`;
+    });
+    select.innerHTML = optionsHtml;
+    select.value = String(selectedAmount);
+  }
+
+  if (grid) {
+    let pillsHtml = "";
+    if (includeAutoMax) {
+      const isActive = Number(selectedAmount) === 0;
+      pillsHtml += `<button type="button" class="amount-pill ${isActive ? 'active' : ''}" onclick="${onClickFnName}(0)">Full Bal</button>`;
+    }
+    numAmounts.forEach(amt => {
+      const isActive = Number(selectedAmount) === amt;
+      pillsHtml += `<button type="button" class="amount-pill ${isActive ? 'active' : ''}" onclick="${onClickFnName}(${amt})">${amt.toLocaleString()}</button>`;
+    });
+    grid.innerHTML = pillsHtml;
+  }
+}
+
 export function selectWithdrawAmount(amount) {
   const select = document.getElementById("withdraw-modal-amount");
   if (select) {
@@ -186,9 +252,10 @@ export function syncWithdrawPills(amount) {
   const grid = document.getElementById("withdraw-pills-grid");
   if (!grid) return;
   const pills = grid.querySelectorAll(".amount-pill");
+  const targetStr = String(amount);
   pills.forEach(pill => {
-    const val = pill.innerText.trim();
-    if (String(val) === String(amount)) {
+    const rawVal = pill.innerText.replace(/,/g, "").trim();
+    if (rawVal === targetStr || (Number(amount) === 0 && rawVal === "Full Bal")) {
       pill.classList.add("active");
     } else {
       pill.classList.remove("active");
@@ -208,9 +275,10 @@ export function syncFormWithdrawPills(amount) {
   const grid = document.getElementById("form-withdraw-pills-grid");
   if (!grid) return;
   const pills = grid.querySelectorAll(".amount-pill");
+  const targetStr = String(amount);
   pills.forEach(pill => {
-    const val = pill.innerText.trim();
-    if ((Number(amount) === 0 && val === "Full Bal") || String(val) === String(amount)) {
+    const rawVal = pill.innerText.replace(/,/g, "").trim();
+    if (rawVal === targetStr || (Number(amount) === 0 && rawVal === "Full Bal")) {
       pill.classList.add("active");
     } else {
       pill.classList.remove("active");
@@ -230,9 +298,10 @@ export function syncWithdrawPagePills(amount) {
   const grid = document.getElementById("withdraw-page-pills-grid");
   if (!grid) return;
   const pills = grid.querySelectorAll(".amount-pill");
+  const targetStr = String(amount);
   pills.forEach(pill => {
-    const val = pill.innerText.trim();
-    if ((Number(amount) === 0 && val === "Full Bal") || String(val) === String(amount)) {
+    const rawVal = pill.innerText.replace(/,/g, "").trim();
+    if (rawVal === targetStr || (Number(amount) === 0 && rawVal === "Full Bal")) {
       pill.classList.add("active");
     } else {
       pill.classList.remove("active");
@@ -256,23 +325,30 @@ export function openWithdrawModal(accountId = null) {
   document.getElementById("withdraw-acc-id").value = acc.id;
   document.getElementById("withdraw-account-label").innerText = `${acc.label || 'Account'} (+233 ${acc.phone})`;
   const incBal = acc.income_balance ? parseFloat(acc.income_balance) : parseFloat(acc.balance || 0);
-  document.getElementById("withdraw-account-balance").innerText = `${incBal.toFixed(2)} GHS (Income Wallet)`;
+  const feeInfo = acc.withdrawal_fee ? ` • Fee: ${acc.withdrawal_fee}%` : "";
+  document.getElementById("withdraw-account-balance").innerText = `${incBal.toFixed(2)} GHS (Income Wallet - ${acc.vip_level || 'VIP'}${feeInfo})`;
 
-  // Select best matching fixed denomination from available Income balance
-  const fixedDenominations = [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000];
-  let defaultAmount = 65;
-  for (let i = fixedDenominations.length - 1; i >= 0; i--) {
-    if (incBal >= fixedDenominations[i]) {
-      defaultAmount = fixedDenominations[i];
+  const allowedDenominations = (acc.withdrawal_amounts && acc.withdrawal_amounts.length > 0)
+    ? acc.withdrawal_amounts
+    : DEFAULT_PLATFORM_DENOMINATIONS;
+
+  let defaultAmount = allowedDenominations[0] || 65;
+  for (let i = allowedDenominations.length - 1; i >= 0; i--) {
+    if (incBal >= allowedDenominations[i]) {
+      defaultAmount = allowedDenominations[i];
       break;
     }
   }
 
-  const amountSelect = document.getElementById("withdraw-modal-amount");
-  if (amountSelect) {
-    amountSelect.value = String(defaultAmount);
-  }
-  syncWithdrawPills(defaultAmount);
+  renderDynamicAmountGrid({
+    selectId: "withdraw-modal-amount",
+    gridId: "withdraw-pills-grid",
+    amounts: allowedDenominations,
+    selectedAmount: defaultAmount,
+    includeAutoMax: false,
+    onClickFnName: "selectWithdrawAmount"
+  });
+
   document.getElementById("withdraw-modal-pin").value = "";
 
   const statusBox = document.getElementById("withdraw-status-banner");
@@ -449,7 +525,11 @@ export function loadWithdrawalsView() {
       const isHolding = a.last_withdraw_status && a.last_withdraw_status.toLowerCase().startsWith('holding');
       return `
       <tr>
-        <td><strong>${escapeHtml(a.label || a.phone)}</strong><br><small style="color:var(--text-dim)">+233 ${escapeHtml(a.phone)}</small></td>
+        <td>
+          <strong>${escapeHtml(a.label || a.phone)}</strong>
+          <br><small style="color:var(--text-dim)">+233 ${escapeHtml(a.phone)}</small>
+          <div style="margin-top:3px;"><span class="badge" style="background:rgba(59,130,246,0.12); color:var(--accent-blue); font-size:0.7rem;">${escapeHtml(a.vip_level || 'VIP')}${a.withdrawal_fee ? ' • ' + a.withdrawal_fee + '% fee' : ''}</span></div>
+        </td>
         <td>
           <strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${inc} GHS</strong>
           <br><small style="color:var(--text-dim)">Income Wallet</small>
@@ -459,7 +539,10 @@ export function loadWithdrawalsView() {
             ${a.auto_withdraw === 1 ? 'ENABLED' : 'DISABLED'}
           </span>
         </td>
-        <td><span class="badge" style="background:rgba(255,255,255,0.06); font-family:var(--font-mono);">${a.withdraw_amount > 0 ? a.withdraw_amount + ' GHS' : 'Full Bal'}</span></td>
+        <td>
+          <span class="badge" style="background:rgba(255,255,255,0.06); font-family:var(--font-mono);">${a.withdraw_amount > 0 ? a.withdraw_amount + ' GHS' : 'Full Bal'}</span>
+          <br><small style="color:var(--text-dim); font-size:0.75rem;">Min: ${(a.withdrawal_amounts && a.withdrawal_amounts[0]) || 65} GHS</small>
+        </td>
         <td style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-dim);">${a.last_withdraw_date ? escapeHtml(a.last_withdraw_date) : 'None'}</td>
         <td>
           <span style="font-size:0.8rem; color:${isHolding ? 'var(--warning)' : (a.last_withdraw_date === todayStr ? 'var(--success)' : 'var(--text-dim)')}">
@@ -493,14 +576,28 @@ export function onWithdrawPageAccountChange() {
   const acc = getAccountById(accId);
   if (!acc) return;
 
+  const incBal = acc.income_balance ? Number(acc.income_balance).toFixed(2) : (acc.balance || '0.00');
+  const feeText = acc.withdrawal_fee ? ` • Fee: <strong>${acc.withdrawal_fee}%</strong>` : "";
+  const allowedTiers = (acc.withdrawal_amounts && acc.withdrawal_amounts.length > 0)
+    ? acc.withdrawal_amounts
+    : DEFAULT_PLATFORM_DENOMINATIONS;
+  const minTier = allowedTiers[0] || 65;
+
   if (hint) {
-    const incBal = acc.income_balance ? Number(acc.income_balance).toFixed(2) : (acc.balance || '0.00');
-    hint.innerHTML = `VIP Level: <strong>${escapeHtml(acc.vip_level || 'VIP')}</strong> | Available Income Wallet: <strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${incBal} GHS</strong> | Total: <span style="color:var(--text-dim);">${acc.balance || '0.00'} GHS</span>`;
+    hint.innerHTML = `VIP Level: <strong>${escapeHtml(acc.vip_level || 'VIP')}</strong>${feeText} | Min: <strong>${minTier} GHS</strong> | Available Income Wallet: <strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${incBal} GHS</strong> | Total: <span style="color:var(--text-dim);">${acc.balance || '0.00'} GHS</span>`;
   }
   document.getElementById("withdraw-page-auto-toggle").checked = (acc.auto_withdraw === 1);
   const targetAmount = acc.withdraw_amount || 0;
-  document.getElementById("withdraw-page-fixed-amount").value = String(targetAmount);
-  syncWithdrawPagePills(targetAmount);
+
+  renderDynamicAmountGrid({
+    selectId: "withdraw-page-fixed-amount",
+    gridId: "withdraw-page-pills-grid",
+    amounts: allowedTiers,
+    selectedAmount: targetAmount,
+    includeAutoMax: true,
+    onClickFnName: "selectWithdrawPageAmount"
+  });
+
   document.getElementById("withdraw-page-wallet").value = String(acc.withdraw_wallet || 2);
   const pinInput = document.getElementById("withdraw-page-pin");
   if (pinInput) {
@@ -513,6 +610,40 @@ export function onWithdrawPageAccountChange() {
     banner.style.display = "none";
     banner.className = "verify-status-banner";
     banner.innerHTML = "";
+  }
+}
+
+export async function refreshAccountWithdrawalOptions() {
+  const accSelect = document.getElementById("withdraw-page-acc-select");
+  if (!accSelect || !accSelect.value) {
+    alert("Please select an account first.");
+    return;
+  }
+  const accId = accSelect.value;
+  const btn = document.getElementById("btn-sync-withdraw-tiers");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Syncing...';
+  }
+
+  try {
+    const data = await api.getWithdrawalOptions(accId, true);
+    if (state.accounts) {
+      const idx = state.accounts.findIndex(a => String(a.id) === String(accId));
+      if (idx !== -1) {
+        state.accounts[idx] = { ...state.accounts[idx], ...data };
+      }
+    }
+    onWithdrawPageAccountChange();
+    loadWithdrawalsView();
+    alert(`✅ Tiers updated for ${data.label}! VIP: ${data.vip_level}, Fee: ${data.withdrawal_fee}%, ${data.withdrawal_amounts.length} platform tiers loaded.`);
+  } catch (err) {
+    alert(`Sync failed: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🔄 Sync Tiers from Ace775';
+    }
   }
 }
 

@@ -263,6 +263,36 @@ class AceApiBot:
             elif isinstance(grade, str) and not grade.upper().startswith("VIP") and grade != "N/A":
                 grade = f"VIP {grade}"
 
+            # Extract Dynamic Withdrawal Denominations & Platform Fee based on User VIP Level
+            w_amounts_raw = usergrade.get("withdrawal_amount") or ""
+            withdrawal_amounts = []
+            if isinstance(w_amounts_raw, str) and w_amounts_raw.strip():
+                for item in w_amounts_raw.split("|"):
+                    item = item.strip()
+                    if item:
+                        try:
+                            val = float(item)
+                            withdrawal_amounts.append(int(val) if val.is_integer() else val)
+                        except ValueError:
+                            pass
+            elif isinstance(w_amounts_raw, (list, tuple)):
+                for item in w_amounts_raw:
+                    try:
+                        val = float(item)
+                        withdrawal_amounts.append(int(val) if val.is_integer() else val)
+                    except (ValueError, TypeError):
+                        pass
+
+            # Fallback to standard platform tiers if usergrade didn't return any
+            if not withdrawal_amounts:
+                withdrawal_amounts = [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
+
+            try:
+                fee_raw = usergrade.get("withdrawal_fee")
+                withdrawal_fee = float(fee_raw) if fee_raw is not None else 0.0
+            except (ValueError, TypeError):
+                withdrawal_fee = 0.0
+
             # Extract Account Wallet Balances (personal balance vs task income)
             account_data = data.get("account", {}) if isinstance(data.get("account"), dict) else {}
             try:
@@ -287,7 +317,9 @@ class AceApiBot:
             self.stats["income_balance"] = f"{income_bal:.2f}"
             self.stats["balance"] = display_balance
             self.stats["grade"] = grade
-            logger.info(f"[API] User: {username} | VIP Level: {grade} | Personal: {personal_bal:.2f} GHS | Income: {income_bal:.2f} GHS | Usable: {display_balance} GHS")
+            self.stats["withdrawal_amounts"] = withdrawal_amounts
+            self.stats["withdrawal_fee"] = withdrawal_fee
+            logger.info(f"[API] User: {username} | Level: {grade} | Income: {income_bal:.2f} GHS | Personal: {personal_bal:.2f} GHS | Fee: {withdrawal_fee}% | Tiers: {withdrawal_amounts[:4]}... ({len(withdrawal_amounts)} tiers)")
 
             # -------------------------------------------------------------
             # Fetch Lifetime Earnings & Platform Statistics (/api/User/mine)
