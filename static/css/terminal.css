@@ -1,0 +1,65 @@
+/* ==============================================================================
+   Ace775 Command Center - Live Automation Terminal Console
+   ============================================================================== */
+
+.terminal-panel {
+  min-height: 540px;
+  display: flex;
+  flex-direction: column;
+}
+
+.pulse-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--success);
+  box-shadow: 0 0 10px var(--success);
+  animation: pulseGlow 2s infinite ease-in-out;
+}
+
+.toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.terminal-body {
+  background: rgba(0, 0, 0, 0.45);
+  font-family: var(--font-mono);
+  padding: 16px 18px;
+  flex: 1;
+  max-height: 560px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.log-line {
+  word-break: break-word;
+  white-space: pre-wrap;
+  transition: opacity 0.15s ease;
+}
+
+.log-info {
+  color: #cbd5e1;
+}
+
+.log-success {
+  color: #34d399;
+}
+
+.log-warning {
+  color: #fbbf24;
+}
+
+.log-error {
+  color: #f87171;
+}

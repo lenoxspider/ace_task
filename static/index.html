@@ -124,7 +124,16 @@
             <h2>Configured Accounts</h2>
             <span class="badge badge-count" id="badge-account-count">0</span>
           </div>
-          <div class="panel-tools">
+        </div>
+
+        <div class="accounts-toolbar">
+          <div class="filter-tabs" id="account-filter-tabs">
+            <button class="filter-tab active" data-filter="all" onclick="setAccountFilter('all')">All (<span id="filter-cnt-all">0</span>)</button>
+            <button class="filter-tab" data-filter="active" onclick="setAccountFilter('active')">🟢 Active (<span id="filter-cnt-active">0</span>)</button>
+            <button class="filter-tab" data-filter="paused" onclick="setAccountFilter('paused')">⏸️ Paused (<span id="filter-cnt-paused">0</span>)</button>
+            <button class="filter-tab" data-filter="running" onclick="setAccountFilter('running')">⚡ Running (<span id="filter-cnt-running">0</span>)</button>
+          </div>
+          <div class="search-wrapper">
             <input type="text" id="account-search" placeholder="Search phone or label..." oninput="filterAccounts()">
           </div>
         </div>
@@ -439,6 +448,6 @@
     </div>
   </div>
 
-  <script src="/static/js/dashboard.js"></script>
+  <script type="module" src="/static/js/dashboard.js"></script>
 </body>
 </html>
