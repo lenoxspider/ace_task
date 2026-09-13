@@ -168,10 +168,22 @@ def run_single_account(account_id: int):
             if reporter.is_configured:
                 reporter.send_error_alert(label, phone, stats["error"])
 
+        try:
+            inc_bal = float(stats.get("income_balance") or 0.0)
+        except (ValueError, TypeError):
+            inc_bal = 0.0
+
+        try:
+            pers_bal = float(stats.get("personal_balance") or 0.0)
+        except (ValueError, TypeError):
+            pers_bal = 0.0
+
         db.update_account_stats(
             account_id,
             vip_level=grade,
             balance=balance,
+            income_balance=inc_bal,
+            personal_balance=pers_bal,
             last_status=status_msg,
             tasks_done=len(tasks),
             earned=total_earned,
@@ -182,7 +194,7 @@ def run_single_account(account_id: int):
         )
 
         broadcast_log(
-            f"✅ Finished '{label}': VIP {grade}, Balance {balance} GHS, Tasks {len(tasks)}, Earned +{total_earned:.2f} GHS ({status_msg})",
+            f"✅ Finished '{label}': VIP {grade}, Balance {balance} GHS (Income: {inc_bal:.2f} GHS), Tasks {len(tasks)}, Earned +{total_earned:.2f} GHS ({status_msg})",
             "success" if not stats.get("error") else "warning"
         )
 
@@ -203,17 +215,70 @@ def run_single_account(account_id: int):
             elif not pay_pwd:
                 broadcast_log(f"⚠️ [Auto-Withdraw] Skipped for '{label}': Transaction PIN/password not configured.", "warning")
             else:
-                try:
-                    curr_bal = float(balance)
-                except (ValueError, TypeError):
-                    curr_bal = 0.0
-
-                if w_amount > 0 and curr_bal < w_amount:
-                    broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': Current balance ({curr_bal:.2f} GHS) below target ({w_amount:.2f} GHS).", "info")
+                # Target wallet balance check (Income Wallet = 2 is standard)
+                if w_flag == 2:
+                    try:
+                        available_bal = float(updated_account.get("income_balance") or 0.0)
+                    except (ValueError, TypeError):
+                        available_bal = 0.0
+                    if available_bal <= 0:
+                        try:
+                            available_bal = float(updated_account.get("balance") or 0.0)
+                        except (ValueError, TypeError):
+                            available_bal = 0.0
+                    wallet_name = "Income Wallet"
                 else:
-                    target_withdraw = w_amount if w_amount > 0 else curr_bal
-                    if target_withdraw > 0:
-                        broadcast_log(f"💸 [Auto-Withdraw] Triggering withdrawal of {target_withdraw:.2f} GHS for '{label}'...", "info")
+                    try:
+                        available_bal = float(updated_account.get("personal_balance") or 0.0)
+                    except (ValueError, TypeError):
+                        available_bal = 0.0
+                    if available_bal <= 0:
+                        try:
+                            available_bal = float(updated_account.get("balance") or 0.0)
+                        except (ValueError, TypeError):
+                            available_bal = 0.0
+                    wallet_name = "Personal Wallet"
+
+                ALLOWED_DENOMINATIONS = [20, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000]
+                MIN_PLATFORM_AMOUNT = 20.0
+
+                if w_amount > 0:
+                    # User picked a specific fixed amount (e.g. 50 GHS)
+                    if available_bal < w_amount:
+                        status_note = f"Holding: {wallet_name} {available_bal:.2f} < Target {w_amount:.2f} GHS"
+                        db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
+                        broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': {wallet_name} balance ({available_bal:.2f} GHS) has not reached configured target ({w_amount:.2f} GHS). Waiting for tasks to accumulate.", "info")
+                    else:
+                        target_withdraw = w_amount
+                        broadcast_log(f"💸 [Auto-Withdraw] {wallet_name} reached target ({available_bal:.2f} GHS >= {target_withdraw:.2f} GHS). Submitting withdrawal of {target_withdraw:.2f} GHS for '{label}'...", "info")
+                        w_bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
+                        w_res = w_bot.apply_withdrawal(amount=target_withdraw, pay_password=pay_pwd, withdrawl_flag=w_flag)
+                        if w_res.get("success"):
+                            w_msg = f"Submitted {target_withdraw:.2f} GHS"
+                            db.update_account_withdrawal_status(account_id, status=w_msg)
+                            broadcast_log(f"✅ [Auto-Withdraw] Success for '{label}': {w_msg}", "success")
+                            if reporter.is_configured:
+                                reporter.send_withdrawal_alert(label, phone, target_withdraw, "Submitted Successfully", w_res.get("message", ""))
+                        else:
+                            fail_msg = f"Failed: {w_res.get('message', 'Unknown error')}"
+                            db.update_account_withdrawal_status(account_id, status=fail_msg)
+                            broadcast_log(f"❌ [Auto-Withdraw] Failed for '{label}': {fail_msg}", "error")
+                            if reporter.is_configured:
+                                reporter.send_withdrawal_alert(label, phone, target_withdraw, "Failed", fail_msg)
+                else:
+                    # w_amount == 0: Full Balance / Auto-Max Allowed
+                    if available_bal < MIN_PLATFORM_AMOUNT:
+                        status_note = f"Holding: {wallet_name} {available_bal:.2f} < Min 20 GHS"
+                        db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
+                        broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': {wallet_name} balance ({available_bal:.2f} GHS) is below platform minimum (20 GHS). Waiting for tasks to accumulate.", "info")
+                    else:
+                        # Select highest platform denomination <= available_bal
+                        target_withdraw = 20.0
+                        for tier in reversed(ALLOWED_DENOMINATIONS):
+                            if available_bal >= tier:
+                                target_withdraw = float(tier)
+                                break
+                        broadcast_log(f"💸 [Auto-Withdraw] Auto-Max payout ({available_bal:.2f} GHS in {wallet_name}). Submitting highest platform tier: {target_withdraw:.2f} GHS for '{label}'...", "info")
                         w_bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
                         w_res = w_bot.apply_withdrawal(amount=target_withdraw, pay_password=pay_pwd, withdrawl_flag=w_flag)
                         if w_res.get("success"):
@@ -542,10 +607,21 @@ def update_account_api(account_id: int, item: AccountUpdate):
             bal = float(bot.stats.get("balance", existing.get("balance", 0.0)))
         except (ValueError, TypeError):
             bal = existing.get("balance", 0.0)
+        try:
+            inc_bal = float(bot.stats.get("income_balance") or 0.0)
+        except (ValueError, TypeError):
+            inc_bal = 0.0
+        try:
+            pers_bal = float(bot.stats.get("personal_balance") or 0.0)
+        except (ValueError, TypeError):
+            pers_bal = 0.0
+
         db.update_account_stats(
             account_id,
             vip_level=vip,
             balance=bal,
+            income_balance=inc_bal,
+            personal_balance=pers_bal,
             last_status="Verified",
             lifetime_tasks=bot.stats.get("lifetime_tasks"),
             lifetime_earned=bot.stats.get("lifetime_earned"),
@@ -626,10 +702,22 @@ def refresh_account_balance_api(account_id: int):
     except (ValueError, TypeError):
         bal = account.get("balance", 0.0)
 
+    try:
+        inc_bal = float(bot.stats.get("income_balance") or 0.0)
+    except (ValueError, TypeError):
+        inc_bal = 0.0
+
+    try:
+        pers_bal = float(bot.stats.get("personal_balance") or 0.0)
+    except (ValueError, TypeError):
+        pers_bal = 0.0
+
     db.update_account_stats(
         account_id,
         vip_level=vip,
         balance=bal,
+        income_balance=inc_bal,
+        personal_balance=pers_bal,
         last_status="Balance Refreshed",
         lifetime_tasks=bot.stats.get("lifetime_tasks"),
         lifetime_earned=bot.stats.get("lifetime_earned"),
@@ -638,7 +726,7 @@ def refresh_account_balance_api(account_id: int):
     )
     lt_tasks = bot.stats.get("lifetime_tasks", 0)
     lt_earned = bot.stats.get("lifetime_earned", 0.0)
-    broadcast_log(f"🔄 Refreshed '{account.get('label') or account['phone']}': VIP {vip} | Balance {bal} GHS | Lifetime: {lt_tasks} tasks (+{lt_earned:.2f} GHS)", "info")
+    broadcast_log(f"🔄 Refreshed '{account.get('label') or account['phone']}': VIP {vip} | Balance {bal} GHS (Income: {inc_bal:.2f} GHS) | Lifetime: {lt_tasks} tasks (+{lt_earned:.2f} GHS)", "info")
     return db.get_account(account_id, decrypt=False)
 
 
@@ -664,15 +752,38 @@ def withdraw_account_now_api(account_id: int, item: Optional[WithdrawRequest] = 
         raise HTTPException(status_code=400, detail="Transaction payment password is required. Please set it in Account settings.")
 
     w_flag = (item.withdraw_wallet if item and item.withdraw_wallet is not None else None) or account.get("withdraw_wallet", 2)
+    if w_flag == 2:
+        try:
+            available_bal = float(account.get("income_balance") or 0.0)
+        except (ValueError, TypeError):
+            available_bal = 0.0
+        if available_bal <= 0:
+            try:
+                available_bal = float(account.get("balance") or 0.0)
+            except (ValueError, TypeError):
+                available_bal = 0.0
+        wallet_name = "Income Wallet"
+    else:
+        try:
+            available_bal = float(account.get("personal_balance") or 0.0)
+        except (ValueError, TypeError):
+            available_bal = 0.0
+        if available_bal <= 0:
+            try:
+                available_bal = float(account.get("balance") or 0.0)
+            except (ValueError, TypeError):
+                available_bal = 0.0
+        wallet_name = "Personal Wallet"
 
     amount = item.amount if item and item.amount and item.amount > 0 else float(account.get("withdraw_amount") or 0.0)
     if amount <= 0:
-        try:
-            amount = float(account.get("balance") or 0.0)
-        except (ValueError, TypeError):
-            amount = 0.0
-    if amount <= 0:
-        raise HTTPException(status_code=400, detail="Please specify a valid withdrawal amount (> 0 GHS).")
+        amount = available_bal
+
+    if amount < 20.0:
+        raise HTTPException(status_code=400, detail=f"Minimum platform withdrawal is 20 GHS. Current {wallet_name} balance is {available_bal:.2f} GHS.")
+
+    if available_bal < amount:
+        raise HTTPException(status_code=400, detail=f"Insufficient funds: {wallet_name} balance ({available_bal:.2f} GHS) is less than requested withdrawal amount ({amount:.2f} GHS).")
 
     bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
     res = bot.apply_withdrawal(amount=amount, pay_password=pay_pwd, withdrawl_flag=w_flag, bypass_time_window=bypass_time)

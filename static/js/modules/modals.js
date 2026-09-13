@@ -255,14 +255,14 @@ export function openWithdrawModal(accountId = null) {
 
   document.getElementById("withdraw-acc-id").value = acc.id;
   document.getElementById("withdraw-account-label").innerText = `${acc.label || 'Account'} (+233 ${acc.phone})`;
-  document.getElementById("withdraw-account-balance").innerText = `${acc.balance || '0.00'} GHS`;
+  const incBal = acc.income_balance ? parseFloat(acc.income_balance) : parseFloat(acc.balance || 0);
+  document.getElementById("withdraw-account-balance").innerText = `${incBal.toFixed(2)} GHS (Income Wallet)`;
 
-  // Select best matching fixed denomination
-  const bal = parseFloat(acc.balance || 0);
+  // Select best matching fixed denomination from available Income balance
   const fixedDenominations = [20, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000];
-  let defaultAmount = 50;
+  let defaultAmount = 20;
   for (let i = fixedDenominations.length - 1; i >= 0; i--) {
-    if (bal >= fixedDenominations[i]) {
+    if (incBal >= fixedDenominations[i]) {
       defaultAmount = fixedDenominations[i];
       break;
     }
@@ -444,10 +444,16 @@ export function loadWithdrawalsView() {
       return;
     }
     const todayStr = new Date().toISOString().split('T')[0];
-    tbody.innerHTML = accs.map(a => `
+    tbody.innerHTML = accs.map(a => {
+      const inc = a.income_balance ? Number(a.income_balance).toFixed(2) : (a.balance || '0.00');
+      const isHolding = a.last_withdraw_status && a.last_withdraw_status.toLowerCase().startsWith('holding');
+      return `
       <tr>
         <td><strong>${escapeHtml(a.label || a.phone)}</strong><br><small style="color:var(--text-dim)">+233 ${escapeHtml(a.phone)}</small></td>
-        <td><strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${a.balance || '0.00'} GHS</strong></td>
+        <td>
+          <strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${inc} GHS</strong>
+          <br><small style="color:var(--text-dim)">Income Wallet</small>
+        </td>
         <td>
           <span class="badge ${a.auto_withdraw === 1 ? 'badge-active' : 'badge-paused'}">
             ${a.auto_withdraw === 1 ? 'ENABLED' : 'DISABLED'}
@@ -455,7 +461,11 @@ export function loadWithdrawalsView() {
         </td>
         <td><span class="badge" style="background:rgba(255,255,255,0.06); font-family:var(--font-mono);">${a.withdraw_amount > 0 ? a.withdraw_amount + ' GHS' : 'Full Bal'}</span></td>
         <td style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-dim);">${a.last_withdraw_date ? escapeHtml(a.last_withdraw_date) : 'None'}</td>
-        <td><span style="font-size:0.8rem; color:${a.last_withdraw_date === todayStr ? 'var(--success)' : 'var(--text-dim)'}">${escapeHtml(a.last_withdraw_status || 'Ready')}</span></td>
+        <td>
+          <span style="font-size:0.8rem; color:${isHolding ? 'var(--warning)' : (a.last_withdraw_date === todayStr ? 'var(--success)' : 'var(--text-dim)')}">
+            ${isHolding ? '⏳ ' : ''}${escapeHtml(a.last_withdraw_status || 'Ready')}
+          </span>
+        </td>
         <td style="text-align:right; white-space:nowrap;">
           <button class="btn btn-xs btn-secondary" onclick="configureAutoWithdrawForAccount(${a.id})" title="Configure Auto-Withdrawal">
             ⚙️ Setup
@@ -465,7 +475,8 @@ export function loadWithdrawalsView() {
           </button>
         </td>
       </tr>
-    `).join("");
+      `;
+    }).join("");
   }
 }
 
@@ -483,7 +494,8 @@ export function onWithdrawPageAccountChange() {
   if (!acc) return;
 
   if (hint) {
-    hint.innerHTML = `VIP Level: <strong>${escapeHtml(acc.vip_level || 'VIP')}</strong> | Balance: <strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${acc.balance || '0.00'} GHS</strong>`;
+    const incBal = acc.income_balance ? Number(acc.income_balance).toFixed(2) : (acc.balance || '0.00');
+    hint.innerHTML = `VIP Level: <strong>${escapeHtml(acc.vip_level || 'VIP')}</strong> | Available Income Wallet: <strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${incBal} GHS</strong> | Total: <span style="color:var(--text-dim);">${acc.balance || '0.00'} GHS</span>`;
   }
   document.getElementById("withdraw-page-auto-toggle").checked = (acc.auto_withdraw === 1);
   const targetAmount = acc.withdraw_amount || 0;

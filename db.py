@@ -132,6 +132,10 @@ def init_db():
         cursor.execute("ALTER TABLE accounts ADD COLUMN last_withdraw_date TEXT DEFAULT ''")
     if "last_withdraw_status" not in columns:
         cursor.execute("ALTER TABLE accounts ADD COLUMN last_withdraw_status TEXT DEFAULT ''")
+    if "income_balance" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN income_balance REAL DEFAULT 0.0")
+    if "personal_balance" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN personal_balance REAL DEFAULT 0.0")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
@@ -287,16 +291,22 @@ def update_account(account_id: int, phone: Optional[str] = None, password: Optio
 
 
 def update_account_withdrawal_status(account_id: int, status: str, withdraw_date: Optional[str] = None):
-    """Record the latest withdrawal status and execution date."""
+    """Record the latest withdrawal status and optional execution date."""
     conn = get_connection()
     cursor = conn.cursor()
-    if withdraw_date is None:
-        withdraw_date = datetime.now().strftime("%Y-%m-%d")
-    cursor.execute("""
-        UPDATE accounts
-        SET last_withdraw_status = ?, last_withdraw_date = ?
-        WHERE id = ?
-    """, (status, withdraw_date, account_id))
+    if withdraw_date is not None:
+        cursor.execute("""
+            UPDATE accounts
+            SET last_withdraw_status = ?, last_withdraw_date = ?
+            WHERE id = ?
+        """, (status, withdraw_date, account_id))
+    else:
+        now_date = datetime.now().strftime("%Y-%m-%d")
+        cursor.execute("""
+            UPDATE accounts
+            SET last_withdraw_status = ?, last_withdraw_date = ?
+            WHERE id = ?
+        """, (status, now_date, account_id))
     conn.commit()
     conn.close()
 
@@ -359,6 +369,7 @@ def get_run_history(account_id: Optional[int] = None, limit: int = 50) -> List[D
 
 
 def update_account_stats(account_id: int, vip_level: Optional[str] = None, balance: Optional[str] = None,
+                         income_balance: Optional[float] = None, personal_balance: Optional[float] = None,
                          last_status: Optional[str] = None, tasks_done: int = 0, earned: float = 0.0,
                          lifetime_tasks: Optional[int] = None, lifetime_earned: Optional[float] = None,
                          tasks_done_today: Optional[int] = None, earned_today: Optional[float] = None):
@@ -393,6 +404,8 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
         UPDATE accounts SET
             vip_level = COALESCE(?, vip_level),
             balance = COALESCE(?, balance),
+            income_balance = COALESCE(?, income_balance),
+            personal_balance = COALESCE(?, personal_balance),
             last_status = ?,
             last_run_time = ?,
             tasks_done_today = ?,
@@ -400,7 +413,7 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
             total_tasks_done = ?,
             total_earned_ghs = ?
         WHERE id = ?
-    """, (vip_level, balance, last_status, now, new_td_today, new_earned_today, new_total_tasks, new_total_earned, account_id))
+    """, (vip_level, balance, income_balance, personal_balance, last_status, now, new_td_today, new_earned_today, new_total_tasks, new_total_earned, account_id))
     conn.commit()
 
     # Fetch updated account details for run history
