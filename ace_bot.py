@@ -616,7 +616,9 @@ def main():
                     b = AceApiBot(base_url=args.base_url, phone=acc["phone"], password=acc["password"])
                 
                 stats = b.run(do_checkin=do_checkin, do_tasks=do_tasks, max_tasks=acc_tasks)
-                reporter = TelegramReporter(bot_token=args.telegram_token, chat_id=args.telegram_chat_id)
+                tg_token = args.telegram_token or db.get_setting("telegram_token", "")
+                tg_chat = args.telegram_chat_id or db.get_setting("telegram_chat_id", "")
+                reporter = TelegramReporter(bot_token=tg_token, chat_id=tg_chat)
                 if reporter.is_configured:
                     reporter.send_report(stats)
 
@@ -652,7 +654,14 @@ def main():
         stats = bot.run(do_checkin=do_checkin, do_tasks=do_tasks, max_tasks=max_tasks)
 
     # Send Telegram notification if configured
-    reporter = TelegramReporter(bot_token=args.telegram_token, chat_id=args.telegram_chat_id)
+    try:
+        import db
+        db_tg_token = db.get_setting("telegram_token", "")
+        db_tg_chat = db.get_setting("telegram_chat_id", "")
+    except Exception:
+        db_tg_token, db_tg_chat = "", ""
+
+    reporter = TelegramReporter(bot_token=args.telegram_token or db_tg_token, chat_id=args.telegram_chat_id or db_tg_chat)
     if reporter.is_configured:
         reporter.send_report(stats)
 
