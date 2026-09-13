@@ -126,6 +126,15 @@ def run_single_account(account_id: int):
 
     RUNNING_ACCOUNT_IDS.add(account_id)
     broadcast_log(f"[ACCOUNT_RUNNING:{account_id}]", "event")
+
+    # Sunday Guard: Ace775 platform is closed for tasks on Sundays
+    if datetime.now().weekday() == 6:
+        broadcast_log(f"⏸️ [Sunday Rest Day] '{label}': Ace775 platform is closed on Sundays. Tasks & check-ins are suspended today.", "warning")
+        db.update_account_stats(account_id, last_status="Sunday: Rest Day")
+        RUNNING_ACCOUNT_IDS.discard(account_id)
+        broadcast_log(f"[ACCOUNT_IDLE:{account_id}]", "event")
+        return
+
     broadcast_log(f"🚀 Starting run for '{label}' ({phone}) in {mode.upper()} mode...", "info")
     db.update_account_stats(account_id, last_status="Running...")
 
@@ -230,6 +239,11 @@ def run_all_enabled_accounts():
     global is_running_lock
     if is_running_lock:
         broadcast_log("⚠️ An execution job is already in progress!", "warning")
+        return
+
+    # Sunday Guard: Ace775 platform is closed for tasks on Sundays
+    if datetime.now().weekday() == 6:
+        broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Batch automation suspended today.", "warning")
         return
 
     is_running_lock = True
@@ -763,12 +777,19 @@ def trigger_single_run(account_id: int, background_tasks: BackgroundTasks):
     account = db.get_account(account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+    if datetime.now().weekday() == 6:
+        broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Tasks suspended today.", "warning")
+        db.update_account_stats(account_id, last_status="Sunday: Rest Day")
+        return {"status": "skipped", "message": "Sunday: Ace775 platform is closed for tasks"}
     background_tasks.add_task(run_single_account, account_id)
     return {"status": "started", "message": f"Run queued for {account['phone']}"}
 
 
 @app.post("/api/run-all")
 def trigger_run_all(background_tasks: BackgroundTasks):
+    if datetime.now().weekday() == 6:
+        broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Batch automation suspended today.", "warning")
+        return {"status": "skipped", "message": "Sunday: Ace775 platform is closed for tasks"}
     global is_running_lock
     if is_running_lock:
         return JSONResponse(status_code=400, content={"status": "busy", "message": "A job is already running!"})

@@ -395,6 +395,11 @@ class AceApiBot:
             )
 
     def do_checkin(self) -> bool:
+        if datetime.now().weekday() == 6:
+            logger.info("[API] Today is Sunday. Ace775 check-in is paused (Sunday rest day).")
+            self.stats["checkin_status"] = "Skipped (Sunday)"
+            return True
+
         logger.info("[API] Checking daily sign-in status...")
         month_res = self._get("/api/checkin/checkinMonthList", {"activity_id": 0})
         activity_id = 0
@@ -430,6 +435,11 @@ class AceApiBot:
         return False
 
     def do_tasks(self, max_tasks: Optional[int] = None) -> bool:
+        if datetime.now().weekday() == 6:
+            logger.info("[API] Today is Sunday. Ace775 platform is closed for tasks (Rest day).")
+            self.stats["error"] = "Sunday: Platform tasks suspended (Rest day)"
+            return True
+
         logger.info("[API] Fetching daily task list...")
         res = self._get("/api/Task/index", {"page_no": 0, "type": 7, "status_flag": 0})
         if not isinstance(res, dict):
@@ -544,6 +554,12 @@ class AceApiBot:
             return {"success": False, "message": msg}
 
     def run(self, do_checkin: bool = True, do_tasks: bool = True, max_tasks: Optional[int] = None) -> Dict[str, Any]:
+        if datetime.now().weekday() == 6:
+            logger.info(f"[API] Sunday detected for {self.phone}: Ace775 platform is closed on Sundays (Rest day). All tasks & checks are suspended.")
+            self.stats["checkin_status"] = "Skipped (Sunday)"
+            self.stats["error"] = "Sunday: Rest Day (No tasks)"
+            return self.stats
+
         if not self.login():
             return self.stats
         if do_checkin:
@@ -578,6 +594,12 @@ class AcePlaywrightBot:
         self._dismiss_popups(page)
 
     def run(self, do_checkin: bool = True, do_tasks: bool = True, max_tasks: Optional[int] = None) -> Dict[str, Any]:
+        if datetime.now().weekday() == 6:
+            logger.info(f"[Browser] Sunday detected for {self.phone}: Ace775 platform is closed on Sundays (Rest day).")
+            self.stats["checkin_status"] = "Skipped (Sunday)"
+            self.stats["error"] = "Sunday: Rest Day (No tasks)"
+            return self.stats
+
         from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
         logger.info(f"[Browser] Starting Playwright (Headless={self.headless})...")

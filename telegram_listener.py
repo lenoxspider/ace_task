@@ -105,6 +105,9 @@ class TelegramCommandBot:
             self.send_message("\n".join(lines))
 
         elif cmd == "/run":
+            if datetime.now().weekday() == 6:
+                self.send_message("⏸️ <b>Today is Sunday (Rest Day)!</b>\nAce775 platform is closed for tasks on Sundays. Automated runs are suspended for the day.")
+                return
             if self.run_all_callback:
                 self.send_message("🚀 <b>Starting batch execution for all active accounts...</b>\nLogs will stream to your dashboard and you will receive a summary when finished.")
                 # Trigger callback in background

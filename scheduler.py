@@ -40,6 +40,14 @@ class SmartScheduler:
                 now_time_str = now.strftime("%H:%M")
                 today_str = now.strftime("%Y-%m-%d")
 
+                # Sunday Guard: Ace775 platform is closed for tasks on Sundays. Never trigger runs or retries.
+                if now.weekday() == 6:
+                    if self.retry_at:
+                        logger.info("⏸️ Auto-Scheduler: Today is Sunday. Canceling queued retry. Platform is closed on Sundays.")
+                        self.retry_at = None
+                    time.sleep(60)
+                    continue
+
                 # 1. Check for scheduled daily run - Slot 1
                 if enabled and sched_time and now_time_str == sched_time and self.last_scheduled_slot_1 != today_str:
                     logger.info(f"⏰ Auto-Scheduler: Triggering scheduled daily run (Slot 1) at {now_time_str}...")
@@ -71,6 +79,11 @@ class SmartScheduler:
     def _run_with_retry_watch(self):
         if not self.run_all_callback:
             return
+        if datetime.now().weekday() == 6:
+            logger.info("⏸️ Auto-Scheduler: Skipping run_all_callback. Today is Sunday (Rest day).")
+            self.retry_at = None
+            return
+
         results = self.run_all_callback()
         auto_retry = db.get_setting("auto_retry_outside_hours", "1") == "1"
         retry_interval = int(db.get_setting("retry_interval_minutes", "30"))
@@ -79,7 +92,7 @@ class SmartScheduler:
         accounts = db.get_accounts()
         outside_hours = any("working hours" in (a.get("last_status") or "").lower() for a in accounts)
 
-        if outside_hours and auto_retry:
+        if outside_hours and auto_retry and datetime.now().weekday() != 6:
             self.retry_at = datetime.now() + timedelta(minutes=retry_interval)
             retry_str = self.retry_at.strftime("%H:%M:%S")
             logger.info(f"⏰ Outside working hours detected. Auto-retry scheduled at {retry_str} (in {retry_interval}m).")
@@ -94,7 +107,9 @@ class SmartScheduler:
 
         status_text = "Disabled"
         if enabled:
-            if self.retry_at:
+            if datetime.now().weekday() == 6:
+                status_text = "Sunday: Platform Closed (Rest Day)"
+            elif self.retry_at:
                 status_text = f"Retrying at {self.retry_at.strftime('%H:%M')}"
             elif sched_time_2:
                 status_text = f"Active ({sched_time}, {sched_time_2})"
