@@ -1,0 +1,589 @@
+"""
+Ace775 Automation Bot for Linux VPS & Local Environments
+Supports:
+  1. Playwright Headless Browser Mode (Full mobile Vue SPA emulation)
+  2. Direct API Mode (Ultra-lightweight HTTP mode for low-memory VPS)
+
+Features:
+  - Phone + Password Login
+  - Daily Sign-in / Check-in
+  - Automated Daily Task Execution (with countdown timer & rating submission)
+  - Configurable task limit (e.g. --max-tasks 3 for testing)
+  - Daily Telegram Report Notification
+"""
+
+import os
+import sys
+import time
+import logging
+import argparse
+from typing import Optional, Dict, Any, List
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Configure clean logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger("AceBot")
+
+load_dotenv()
+
+
+# ==============================================================================
+# Telegram Notification Service
+# ==============================================================================
+class TelegramReporter:
+    def __init__(self, bot_token: Optional[str] = None, chat_id: Optional[str] = None):
+        self.bot_token = bot_token or os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+        self.chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.bot_token and self.chat_id)
+
+    def send_message(self, text: str) -> bool:
+        if not self.is_configured:
+            logger.info("[Telegram] Bot token or Chat ID not configured. Skipping notification.")
+            return False
+
+        import requests
+        url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+        payload = {
+            "chat_id": self.chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True
+        }
+        try:
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.status_code == 200:
+                logger.info("[Telegram] Daily report sent successfully!")
+                return True
+            else:
+                logger.warning(f"[Telegram] Failed to send message: {resp.status_code} - {resp.text}")
+                return False
+        except Exception as e:
+            logger.error(f"[Telegram] Error sending message: {e}")
+            return False
+
+    def send_report(self, stats: Dict[str, Any]) -> bool:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        phone = stats.get("phone", "Unknown")
+        mode = stats.get("mode", "browser").upper()
+        grade = stats.get("grade", "N/A")
+        balance = stats.get("balance", "N/A")
+        currency = stats.get("currency", "GHS")
+        checkin_status = stats.get("checkin_status", "Skipped")
+        tasks = stats.get("tasks", [])
+        total_earned = stats.get("total_earned", 0.0)
+
+        lines = [
+            "🚀 <b>Ace775 Daily Automation Report</b>",
+            f"📅 <i>{now}</i>",
+            "",
+            f"👤 <b>Account:</b> <code>{phone}</code>",
+            f"👑 <b>VIP Level:</b> {grade}",
+            f"💰 <b>Wallet Balance:</b> {currency} {balance}",
+            f"⚙️ <b>Execution Mode:</b> {mode}",
+            "",
+            f"🗓 <b>Daily Check-in:</b> {checkin_status}",
+            f"📋 <b>Tasks Completed:</b> {len(tasks)}"
+        ]
+
+        if tasks:
+            for t in tasks:
+                title = t.get("title", "Task")
+                amt = t.get("amount", "0")
+                lines.append(f"  • {title} (+{amt} {currency})")
+            lines.append(f"💵 <b>Total Earned:</b> +{total_earned:.2f} {currency}")
+
+        if stats.get("error"):
+            lines.extend(["", f"⚠️ <b>Notice:</b> {stats['error']}"])
+
+        lines.extend(["", "✅ <i>All automated operations finished.</i>"])
+        return self.send_message("\n".join(lines))
+
+
+# ==============================================================================
+# Direct API Mode (Lightweight & Fast for Linux VPS / Local Testing)
+# ==============================================================================
+class AceApiBot:
+    def __init__(self, base_url: str, phone: str, password: str):
+        import requests
+        self.base_url = base_url.rstrip("/")
+        self.phone = phone
+        self.password = password
+        self.session = requests.Session()
+        self.session.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 "
+                "Mobile/15E148 Safari/604.1"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json;charset=UTF-8",
+            "Referer": f"{self.base_url}/",
+            "Origin": self.base_url,
+        })
+        self.token: Optional[str] = None
+        self.user_info: Dict[str, Any] = {}
+        self.stats: Dict[str, Any] = {
+            "phone": phone,
+            "mode": "api",
+            "checkin_status": "Skipped",
+            "tasks": [],
+            "total_earned": 0.0,
+            "currency": "GHS"
+        }
+
+    def _post(self, path: str, json_data: Optional[dict] = None) -> dict:
+        url = f"{self.base_url}{path}"
+        try:
+            resp = self.session.post(url, json=json_data or {}, timeout=15)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.error(f"POST {path} failed: {e}")
+            return {}
+
+    def _get(self, path: str, params: Optional[dict] = None) -> dict:
+        url = f"{self.base_url}{path}"
+        try:
+            resp = self.session.get(url, params=params or {}, timeout=15)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.error(f"GET {path} failed: {e}")
+            return {}
+
+    def login(self) -> bool:
+        logger.info(f"[API] Attempting login for phone: {self.phone}...")
+        payload = {
+            "username": self.phone,
+            "password": self.password,
+            "log_type": 1,
+            "login_idx": "H5_automation_bot"
+        }
+        res = self._post("/api/Login/login", payload)
+        
+        token = None
+        if isinstance(res, dict):
+            if res.get("code") == 1 and isinstance(res.get("data"), dict):
+                token = res["data"].get("token")
+            elif "token" in res:
+                token = res.get("token")
+            elif res.get("code") == 1 and isinstance(res.get("data"), str):
+                token = res.get("data")
+
+        if token:
+            self.token = token
+            self.session.headers["token"] = token
+            self.session.headers["Authorization"] = f"Bearer {token}"
+            logger.info("[API] Login successful! Token acquired.")
+            self.fetch_user_info()
+            return True
+        else:
+            msg = res.get("msg", "Unknown error or invalid credentials")
+            logger.error(f"[API] Login failed: {msg} (Response: {res})")
+            self.stats["error"] = f"Login failed: {msg}"
+            return False
+
+    def fetch_user_info(self):
+        res = self._get("/api/User/info")
+        if isinstance(res, dict) and res.get("code") == 1:
+            data = res.get("data", {})
+            self.user_info = data
+            username = data.get("username", self.phone)
+            balance = data.get("money", "0")
+            grade = data.get("grade_name", data.get("grade", "N/A"))
+            self.stats["balance"] = balance
+            self.stats["grade"] = grade
+            logger.info(f"[API] User: {username} | VIP Level: {grade} | Balance: {balance}")
+
+    def do_checkin(self) -> bool:
+        logger.info("[API] Checking daily sign-in status...")
+        month_res = self._get("/api/checkin/checkinMonthList", {"activity_id": 0})
+        activity_id = 0
+        if isinstance(month_res, dict) and month_res.get("code") == 1:
+            data = month_res.get("data", {})
+            for date_key, item in data.items() if isinstance(data, dict) else []:
+                if isinstance(item, dict) and item.get("is_today") == 1:
+                    if item.get("is_checkin") == 1:
+                        logger.info("[API] Already checked in today! Skipping.")
+                        self.stats["checkin_status"] = "✅ Already signed in today"
+                        return True
+
+        res = self._post("/api/Checkin/checkin", {"activity_id": activity_id})
+        if isinstance(res, dict) and res.get("code") == 1:
+            logger.info(f"[API] Daily check-in successful! Message: {res.get('msg', 'Success')}")
+            self.stats["checkin_status"] = "✅ Successfully signed in"
+            return True
+        else:
+            msg = res.get("msg", "No response")
+            logger.info(f"[API] Check-in result: {msg}")
+            self.stats["checkin_status"] = f"ℹ️ {msg}"
+            return False
+
+    def do_tasks(self, max_tasks: Optional[int] = None) -> bool:
+        logger.info("[API] Fetching daily task list...")
+        res = self._get("/api/Task/index", {"page_no": 0, "type": 7, "status_flag": 0})
+        if not isinstance(res, dict):
+            logger.error("[API] Failed to fetch task list.")
+            return False
+
+        data = res.get("data", res)
+        task_list = data.get("list", []) if isinstance(data, dict) else []
+        ongoing_total = data.get("ongoing_total", len(task_list)) if isinstance(data, dict) else len(task_list)
+
+        logger.info(f"[API] Total tasks found: {len(task_list)} (Ongoing: {ongoing_total})")
+
+        incomplete_tasks = [t for t in task_list if not t.get("is_complate")]
+        if not incomplete_tasks:
+            logger.info("[API] All daily tasks are already completed! Great job.")
+            return True
+
+        if max_tasks and max_tasks > 0:
+            logger.info(f"[API] Limit set to {max_tasks} task(s) for this run.")
+            incomplete_tasks = incomplete_tasks[:max_tasks]
+
+        logger.info(f"[API] Tasks to execute in this run: {len(incomplete_tasks)}")
+        for idx, task in enumerate(incomplete_tasks, 1):
+            task_id = task.get("id")
+            title = task.get("title", f"Task #{task_id}")
+            amount = task.get("amount", "0")
+            logger.info(f"\n--- [API] Processing Task {idx}/{len(incomplete_tasks)}: '{title}' (+{amount}) ---")
+
+            detail_res = self._get("/api/Task/details", {"id": task_id})
+            limits = 5
+            if isinstance(detail_res, dict):
+                detail_data = detail_res.get("data", detail_res)
+                if isinstance(detail_data, dict):
+                    limits = int(detail_data.get("limits", 5))
+
+            limits = max(limits, 5)
+            logger.info(f"[API] Waiting for task countdown timer: {limits} seconds...")
+            for remaining in range(limits, 0, -1):
+                sys.stdout.write(f"\r  Countdown: {remaining}s remaining... ")
+                sys.stdout.flush()
+                time.sleep(1)
+            print()
+
+            comp_res = self._post("/api/Task/completeTask", {"task_id": task_id})
+            if isinstance(comp_res, dict) and comp_res.get("code") == 1:
+                logger.info(f"[API] Task '{title}' completed successfully! Reward added.")
+                self.stats["tasks"].append({"title": title, "amount": str(amount)})
+                try:
+                    self.stats["total_earned"] += float(amount)
+                except ValueError:
+                    pass
+            else:
+                msg = comp_res.get("msg", "Unknown response")
+                logger.warning(f"[API] Task completion response: {msg}")
+
+            time.sleep(2)
+
+        logger.info(f"[API] Finished executing {len(self.stats['tasks'])} task(s).")
+        self.fetch_user_info()
+        return True
+
+    def run(self, do_checkin: bool = True, do_tasks: bool = True, max_tasks: Optional[int] = None) -> Dict[str, Any]:
+        if not self.login():
+            return self.stats
+        if do_checkin:
+            self.do_checkin()
+        if do_tasks:
+            self.do_tasks(max_tasks=max_tasks)
+        logger.info("[API] Automation workflow finished successfully!")
+        return self.stats
+
+
+# ==============================================================================
+# Playwright Headless Browser Mode (Full Mobile Vue SPA Emulation)
+# ==============================================================================
+class AcePlaywrightBot:
+    def __init__(self, base_url: str, phone: str, password: str, headless: bool = True):
+        self.base_url = base_url.rstrip("/")
+        self.phone = phone
+        self.password = password
+        self.headless = headless
+        self.stats: Dict[str, Any] = {
+            "phone": phone,
+            "mode": "browser",
+            "checkin_status": "Skipped",
+            "tasks": [],
+            "total_earned": 0.0,
+            "currency": "GHS"
+        }
+
+    def run(self, do_checkin: bool = True, do_tasks: bool = True, max_tasks: Optional[int] = None) -> Dict[str, Any]:
+        from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+        logger.info(f"[Browser] Starting Playwright (Headless={self.headless})...")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=self.headless,
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-blink-features=AutomationControlled",
+                ]
+            )
+
+            context = browser.new_context(
+                viewport={"width": 375, "height": 812},
+                user_agent=(
+                    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+                    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 "
+                    "Mobile/15E148 Safari/604.1"
+                ),
+                is_mobile=True,
+                has_touch=True
+            )
+            page = context.new_page()
+            page.on("dialog", lambda dialog: dialog.accept())
+
+            try:
+                # 1. Login
+                logger.info(f"[Browser] Navigating to {self.base_url}/#/log...")
+                page.goto(f"{self.base_url}/#/log", wait_until="networkidle", timeout=30000)
+                page.wait_for_timeout(2000)
+                self._dismiss_popups(page)
+
+                logger.info(f"[Browser] Filling credentials for {self.phone}...")
+                phone_input = page.locator("input[placeholder*='Phone'], input[placeholder*='手机号'], input[type='tel'], input[type='text']").first
+                phone_input.wait_for(state="visible", timeout=10000)
+                phone_input.fill(self.phone)
+
+                pwd_input = page.locator("input[type='password']").first
+                pwd_input.wait_for(state="visible", timeout=10000)
+                pwd_input.fill(self.password)
+
+                login_btn = page.locator("button:has-text('Login'), button:has-text('登录'), .btnLogin, .van-button--info").first
+                logger.info("[Browser] Clicking Login button...")
+                login_btn.click()
+
+                page.wait_for_timeout(3000)
+                self._dismiss_popups(page)
+
+                token = page.evaluate("() => localStorage.getItem('token')")
+                if token:
+                    logger.info("[Browser] Login confirmed! Stored token found.")
+                else:
+                    logger.info(f"[Browser] Current URL: {page.url}")
+
+                # 2. Daily Sign-In / Check-in
+                if do_checkin:
+                    logger.info(f"[Browser] Navigating to Check-in page ({self.base_url}/#/checkin)...")
+                    page.goto(f"{self.base_url}/#/checkin", wait_until="networkidle", timeout=20000)
+                    page.wait_for_timeout(2000)
+                    self._dismiss_popups(page)
+
+                    checkin_btn = page.locator("button:has-text('Check In Now'), button:has-text('立即签到'), .btnWarp button").first
+                    if checkin_btn.is_visible():
+                        btn_text = checkin_btn.inner_text().strip()
+                        if "SIGNED IN" in btn_text.upper() or "已签到" in btn_text:
+                            logger.info("[Browser] Daily sign-in already completed today.")
+                            self.stats["checkin_status"] = "✅ Already signed in today"
+                        else:
+                            logger.info(f"[Browser] Clicking check-in button ('{btn_text}')...")
+                            checkin_btn.click()
+                            page.wait_for_timeout(2000)
+                            logger.info("[Browser] Daily check-in clicked successfully.")
+                            self.stats["checkin_status"] = "✅ Successfully signed in"
+                    else:
+                        logger.info("[Browser] Check-in button not active or already checked in.")
+                        self.stats["checkin_status"] = "ℹ️ Not available / already done"
+
+                # 3. Daily Tasks
+                if do_tasks:
+                    logger.info(f"[Browser] Navigating to Tasks page ({self.base_url}/#/task)...")
+                    page.goto(f"{self.base_url}/#/task", wait_until="networkidle", timeout=20000)
+                    page.wait_for_timeout(2500)
+                    self._dismiss_popups(page)
+
+                    task_items = page.locator(".grid2 ul li, .taskList li, .contWarp ul li")
+                    count = task_items.count()
+                    logger.info(f"[Browser] Found {count} task card elements.")
+
+                    if count == 0:
+                        logger.info("[Browser] No task items found or all tasks completed.")
+                    else:
+                        target_tasks = max_tasks if (max_tasks and max_tasks > 0) else count
+                        completed_in_run = 0
+
+                        for i in range(count):
+                            if completed_in_run >= target_tasks:
+                                logger.info(f"[Browser] Reached requested limit of {target_tasks} task(s). Stopping.")
+                                break
+
+                            page.goto(f"{self.base_url}/#/task", wait_until="networkidle", timeout=20000)
+                            page.wait_for_timeout(2000)
+                            self._dismiss_popups(page)
+
+                            current_items = page.locator(".grid2 ul li, .taskList li, .contWarp ul li")
+                            if i >= current_items.count():
+                                break
+                            item = current_items.nth(i)
+
+                            text = item.inner_text()
+                            if "Completed" in text or "已完成" in text:
+                                logger.info(f"[Browser] Task {i+1} is already completed. Skipping.")
+                                continue
+
+                            # Try to parse title
+                            title = f"Task #{i+1}"
+                            amount = "0"
+                            try:
+                                h4 = item.locator("h4").first
+                                if h4.is_visible():
+                                    title = h4.inner_text().strip()
+                                p = item.locator(".textWarp p, p").first
+                                if p.is_visible():
+                                    amount = p.inner_text().replace("+", "").strip()
+                            except Exception:
+                                pass
+
+                            logger.info(f"\n--- [Browser] Starting Task {i+1} ('{title}') [Run task {completed_in_run+1}/{target_tasks}] ---")
+                            item.click()
+                            page.wait_for_timeout(2000)
+
+                            logger.info(f"[Browser] Currently on: {page.url}")
+                            countdown_elem = page.locator(".btnWarp button, .detailsWarp .btnWarp").first
+                            if countdown_elem.is_visible():
+                                logger.info(f"[Browser] Task button: {countdown_elem.inner_text().strip()}")
+
+                            max_wait = 30
+                            while max_wait > 0:
+                                btn_txt = countdown_elem.inner_text().strip() if countdown_elem.is_visible() else ""
+                                if "Completed" in btn_txt or "已完成" in btn_txt or not page.url.endswith("tDetails"):
+                                    logger.info("[Browser] Task completed!")
+                                    completed_in_run += 1
+                                    self.stats["tasks"].append({"title": title, "amount": amount})
+                                    try:
+                                        self.stats["total_earned"] += float(amount)
+                                    except ValueError:
+                                        pass
+                                    break
+                                time.sleep(1)
+                                max_wait -= 1
+
+                            rate_popup = page.locator(".rateWarp, .van-popup:has(.van-rate)")
+                            if rate_popup.is_visible():
+                                logger.info("[Browser] 5-Star rating popup appeared. Rating 5 stars...")
+                                stars = page.locator(".van-rate__item")
+                                if stars.count() >= 5:
+                                    stars.nth(4).click()
+                                    page.wait_for_timeout(500)
+                                confirm_btn = page.locator(".rateWarp button:has-text('Confirm'), .rateWarp button:has-text('确认')").first
+                                if confirm_btn.is_visible():
+                                    confirm_btn.click()
+                                    page.wait_for_timeout(1000)
+
+                            page.wait_for_timeout(2000)
+
+                    logger.info("[Browser] All requested daily tasks processed!")
+
+                # Retrieve balance and grade from /#/user
+                try:
+                    page.goto(f"{self.base_url}/#/user", wait_until="networkidle", timeout=15000)
+                    page.wait_for_timeout(1500)
+                    balance_el = page.locator(".money, .accountBalance, .userMoney, .van-nav-bar__title").first
+                    if balance_el.is_visible():
+                        self.stats["balance"] = balance_el.inner_text().strip()
+                except Exception:
+                    pass
+
+            except PlaywrightTimeoutError as te:
+                logger.error(f"[Browser] Timeout occurred: {te}")
+                self.stats["error"] = f"Browser Timeout: {te}"
+            except Exception as e:
+                logger.error(f"[Browser] Unexpected error: {e}", exc_info=True)
+                self.stats["error"] = f"Unexpected Error: {e}"
+            finally:
+                context.close()
+                browser.close()
+                logger.info("[Browser] Browser session closed.")
+        return self.stats
+
+    def _dismiss_popups(self, page):
+        selectors = [
+            ".popupWarp .close",
+            ".van-popup__close-icon",
+            ".van-dialog__confirm",
+            ".taxCont",
+            "button:has-text('Confirm')",
+            "button:has-text('确认')",
+            "button:has-text('Close')"
+        ]
+        for sel in selectors:
+            try:
+                el = page.locator(sel).first
+                if el.is_visible(timeout=500):
+                    logger.info(f"[Browser] Dismissing modal popup: {sel}")
+                    el.click()
+                    page.wait_for_timeout(500)
+            except Exception:
+                pass
+
+
+# ==============================================================================
+# CLI Entrypoint
+# ==============================================================================
+def main():
+    parser = argparse.ArgumentParser(description="Ace775 Automation Bot for Linux VPS & Local Environments")
+    parser.add_argument("--phone", default=os.getenv("ACE_PHONE", ""), help="Phone number / Username for ace775.com")
+    parser.add_argument("--password", default=os.getenv("ACE_PASSWORD", ""), help="Password for ace775.com")
+    parser.add_argument("--mode", default=os.getenv("ACE_MODE", "browser").lower(), choices=["browser", "api"],
+                        help="Execution mode: 'browser' (Playwright Headless) or 'api' (Direct HTTP requests)")
+    parser.add_argument("--base-url", default=os.getenv("ACE_BASE_URL", "https://ace775.com"), help="Base website URL")
+    parser.add_argument("--headless", action="store_true", default=os.getenv("ACE_HEADLESS", "true").lower() == "true",
+                        help="Run browser in headless mode")
+    parser.add_argument("--no-checkin", action="store_true", help="Skip daily sign-in / check-in")
+    parser.add_argument("--no-tasks", action="store_true", help="Skip daily task execution")
+    parser.add_argument("--max-tasks", type=int, default=int(os.getenv("MAX_TASKS", 0)),
+                        help="Limit number of tasks to execute (0 for all tasks, e.g. 3 for testing)")
+    parser.add_argument("--telegram-token", default=os.getenv("TELEGRAM_BOT_TOKEN", ""), help="Telegram Bot Token")
+    parser.add_argument("--telegram-chat-id", default=os.getenv("TELEGRAM_CHAT_ID", ""), help="Telegram Chat ID")
+
+    args = parser.parse_args()
+
+    if not args.phone or not args.password:
+        logger.error("Missing credentials! Please set ACE_PHONE and ACE_PASSWORD in .env or pass --phone and --password.")
+        logger.error("Example: python ace_bot.py --phone 0501234567 --password mypassword")
+        sys.exit(1)
+
+    do_checkin = not args.no_checkin and os.getenv("DO_CHECKIN", "true").lower() == "true"
+    do_tasks = not args.no_tasks and os.getenv("DO_TASKS", "true").lower() == "true"
+    max_tasks = args.max_tasks if args.max_tasks > 0 else None
+
+    logger.info("========================================")
+    logger.info("           Ace775 Automation Bot        ")
+    logger.info("========================================")
+    logger.info(f"Target    : {args.base_url}")
+    logger.info(f"Phone     : {args.phone}")
+    logger.info(f"Mode      : {args.mode.upper()}")
+    logger.info(f"Max Tasks : {max_tasks if max_tasks else 'All'}")
+    logger.info(f"Check-in  : {do_checkin} | Tasks: {do_tasks}")
+    logger.info("========================================")
+
+    stats: Dict[str, Any] = {}
+    if args.mode == "api":
+        bot = AceApiBot(base_url=args.base_url, phone=args.phone, password=args.password)
+        stats = bot.run(do_checkin=do_checkin, do_tasks=do_tasks, max_tasks=max_tasks)
+    else:
+        bot = AcePlaywrightBot(base_url=args.base_url, phone=args.phone, password=args.password, headless=args.headless)
+        stats = bot.run(do_checkin=do_checkin, do_tasks=do_tasks, max_tasks=max_tasks)
+
+    # Send Telegram notification if configured
+    reporter = TelegramReporter(bot_token=args.telegram_token, chat_id=args.telegram_chat_id)
+    if reporter.is_configured:
+        reporter.send_report(stats)
+
+
+if __name__ == "__main__":
+    main()

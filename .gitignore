@@ -1,0 +1,21 @@
+# Environment variables (Credentials)
+.env
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs
+*.log
+cron.log
+bot.log
+
+# Scratch scripts
+scratch/
+.pytest_cache/
