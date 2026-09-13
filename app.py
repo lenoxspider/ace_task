@@ -239,6 +239,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class AccountVerifyRequest(BaseModel):
+    phone: str
+    password: str
+
+
+
 # ==============================================================================
 # Authentication & View Routes
 # ==============================================================================
@@ -303,25 +309,95 @@ def get_accounts_api():
     return db.get_accounts()
 
 
+@app.post("/api/accounts/verify")
+def verify_account_api(item: AccountVerifyRequest):
+    clean_phone = db.normalize_phone(item.phone)
+    if not clean_phone or not item.password.strip():
+        raise HTTPException(status_code=400, detail="Phone number and password are required")
+    base_url = db.get_setting("base_url", "https://ace775.com")
+    bot = AceApiBot(base_url=base_url, phone=clean_phone, password=item.password.strip())
+    if bot.login():
+        vip = bot.stats.get("grade", "VIP")
+        bal = bot.stats.get("balance", "0.00")
+        return {
+            "valid": True,
+            "phone": clean_phone,
+            "vip_level": vip,
+            "balance": bal,
+            "message": f"Logins verified successfully! VIP: {vip} | Balance: {bal} GHS"
+        }
+    else:
+        err = bot.stats.get("error", "Login failed. Please check credentials.")
+        if err.startswith("Login failed: "):
+            err = err[14:]
+        return {
+            "valid": False,
+            "phone": clean_phone,
+            "message": err
+        }
+
+
 @app.post("/api/accounts")
 def create_account_api(item: AccountCreate):
+    clean_phone = db.normalize_phone(item.phone)
+    if not clean_phone or not item.password.strip():
+        raise HTTPException(status_code=400, detail="Phone number and password are required")
+
+    base_url = db.get_setting("base_url", "https://ace775.com")
+    # Quick verification login against Ace775
+    bot = AceApiBot(base_url=base_url, phone=clean_phone, password=item.password.strip())
+    if not bot.login():
+        err = bot.stats.get("error", "Login failed")
+        if err.startswith("Login failed: "):
+            err = err[14:]
+        raise HTTPException(status_code=400, detail=f"Ace775 Verification Failed: {err}")
+
     try:
         acc = db.add_account(
-            phone=item.phone,
-            password=item.password,
+            phone=clean_phone,
+            password=item.password.strip(),
             label=item.label or "",
             max_tasks=item.max_tasks or 0,
             mode=item.mode or "api",
             enabled=item.enabled if item.enabled is not None else 1
         )
-        broadcast_log(f"Added new account '{acc['label']}' ({acc['phone']})", "info")
-        return acc
+        vip = bot.stats.get("grade", "VIP")
+        try:
+            bal = float(bot.stats.get("balance", 0.0))
+        except (ValueError, TypeError):
+            bal = 0.0
+        db.update_account_stats(acc["id"], vip_level=vip, balance=bal, last_status="Verified")
+        broadcast_log(f"Verified & added account '{acc['label']}' ({clean_phone}) - VIP: {vip}, Balance: {bal} GHS", "success")
+        return db.get_account(acc["id"])
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to add account: {str(e)}")
 
 
 @app.put("/api/accounts/{account_id}")
 def update_account_api(account_id: int, item: AccountUpdate):
+    existing = db.get_account(account_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    target_phone = db.normalize_phone(item.phone) if item.phone else existing["phone"]
+    target_pwd = item.password.strip() if item.password and item.password.strip() else existing["password"]
+
+    # If phone or password changed, verify credentials with Ace775
+    if (item.phone and target_phone != existing["phone"]) or (item.password and item.password.strip() and target_pwd != existing["password"]):
+        base_url = db.get_setting("base_url", "https://ace775.com")
+        bot = AceApiBot(base_url=base_url, phone=target_phone, password=target_pwd)
+        if not bot.login():
+            err = bot.stats.get("error", "Login failed")
+            if err.startswith("Login failed: "):
+                err = err[14:]
+            raise HTTPException(status_code=400, detail=f"Ace775 Verification Failed: {err}")
+        vip = bot.stats.get("grade", existing.get("vip_level", "VIP"))
+        try:
+            bal = float(bot.stats.get("balance", existing.get("balance", 0.0)))
+        except (ValueError, TypeError):
+            bal = existing.get("balance", 0.0)
+        db.update_account_stats(account_id, vip_level=vip, balance=bal, last_status="Verified")
+
     acc = db.update_account(
         account_id=account_id,
         phone=item.phone,
@@ -334,6 +410,7 @@ def update_account_api(account_id: int, item: AccountUpdate):
     if not acc:
         raise HTTPException(status_code=404, detail="Account not found")
     return acc
+
 
 
 @app.delete("/api/accounts/{account_id}")

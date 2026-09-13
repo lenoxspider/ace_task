@@ -216,6 +216,19 @@ function openAccountModal(acc = null) {
   document.getElementById("form-max-tasks").value = acc ? acc.max_tasks : 0;
   document.getElementById("form-enabled").checked = acc ? Boolean(acc.enabled) : true;
 
+  // Reset verification banner
+  const statusBox = document.getElementById("account-verify-status");
+  if (statusBox) {
+    statusBox.style.display = "none";
+    statusBox.className = "verify-status-banner";
+    statusBox.innerHTML = "";
+  }
+  const saveBtn = document.getElementById("btn-save-account");
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<span class="btn-icon">💾</span> Verify & Save';
+  }
+
   document.getElementById("modal-title").innerText = acc ? "Edit Account" : "Add New Account";
   document.getElementById("account-modal").classList.add("active");
 }
@@ -229,17 +242,78 @@ function editAccount(id) {
   if (acc) openAccountModal(acc);
 }
 
+async function testAccountLogins() {
+  const phoneInput = document.getElementById("form-phone");
+  const pwdInput = document.getElementById("form-password");
+  const statusBox = document.getElementById("account-verify-status");
+  const testBtn = document.getElementById("btn-test-login");
+  const modal = document.querySelector("#account-modal .modal-card");
+
+  const phone = phoneInput.value.trim();
+  const password = pwdInput.value.trim();
+
+  if (!phone || !password) {
+    statusBox.style.display = "flex";
+    statusBox.className = "verify-status-banner verify-error";
+    statusBox.innerHTML = "⚠️ Please enter both phone number and password first.";
+    return;
+  }
+
+  statusBox.style.display = "flex";
+  statusBox.className = "verify-status-banner verify-loading";
+  statusBox.innerHTML = "⏳ Verifying logins with Ace775 API...";
+  testBtn.disabled = true;
+
+  try {
+    const res = await fetch("/api/accounts/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, password })
+    });
+    const data = await res.json();
+    if (res.ok && data.valid) {
+      statusBox.className = "verify-status-banner verify-success";
+      statusBox.innerHTML = `✅ <strong>Logins Valid!</strong> VIP: <strong>${escapeHtml(data.vip_level)}</strong> | Balance: <strong>${escapeHtml(data.balance)} GHS</strong>`;
+    } else {
+      statusBox.className = "verify-status-banner verify-error";
+      statusBox.innerHTML = `❌ <strong>Verification Failed:</strong> ${escapeHtml(data.message || data.detail || "Invalid credentials")}`;
+      if (modal) {
+        modal.classList.add("shake");
+        setTimeout(() => modal.classList.remove("shake"), 500);
+      }
+    }
+  } catch (err) {
+    statusBox.className = "verify-status-banner verify-error";
+    statusBox.innerHTML = `❌ Network error connecting to verification service.`;
+  } finally {
+    testBtn.disabled = false;
+  }
+}
+
 async function handleAccountSubmit(e) {
   e.preventDefault();
   const id = document.getElementById("form-account-id").value;
+  const saveBtn = document.getElementById("btn-save-account");
+  const statusBox = document.getElementById("account-verify-status");
+  const modal = document.querySelector("#account-modal .modal-card");
+
+  const phone = document.getElementById("form-phone").value.trim();
+  const password = document.getElementById("form-password").value.trim();
+
   const payload = {
-    phone: document.getElementById("form-phone").value.trim(),
-    password: document.getElementById("form-password").value.trim(),
+    phone: phone,
+    password: password,
     label: document.getElementById("form-label").value.trim(),
     mode: document.getElementById("form-mode").value,
     max_tasks: parseInt(document.getElementById("form-max-tasks").value, 10) || 0,
     enabled: document.getElementById("form-enabled").checked ? 1 : 0
   };
+
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="btn-icon">⏳</span> Verifying & Saving...';
+  statusBox.style.display = "flex";
+  statusBox.className = "verify-status-banner verify-loading";
+  statusBox.innerHTML = "⏳ Logging into Ace775 to verify credentials...";
 
   try {
     const url = id ? `/api/accounts/${id}` : "/api/accounts";
@@ -250,16 +324,29 @@ async function handleAccountSubmit(e) {
       body: JSON.stringify(payload)
     });
 
+    const data = await res.json();
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || "Save failed");
+      throw new Error(data.detail || "Save failed");
     }
 
-    closeAccountModal();
-    loadAccounts();
-    loadStats();
+    statusBox.className = "verify-status-banner verify-success";
+    statusBox.innerHTML = `✅ <strong>Verified & Saved!</strong> Account active.`;
+
+    setTimeout(() => {
+      closeAccountModal();
+      loadAccounts();
+      loadStats();
+    }, 600);
   } catch (err) {
-    alert("Error: " + err.message);
+    statusBox.className = "verify-status-banner verify-error";
+    statusBox.innerHTML = `❌ <strong>Save Rejected:</strong> ${escapeHtml(err.message)}`;
+    if (modal) {
+      modal.classList.add("shake");
+      setTimeout(() => modal.classList.remove("shake"), 500);
+    }
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<span class="btn-icon">💾</span> Verify & Save';
   }
 }
 

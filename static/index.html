@@ -191,9 +191,16 @@
           </label>
         </div>
 
+        <div id="account-verify-status" class="verify-status-banner" style="display:none;"></div>
+
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="closeAccountModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="btn-save-account">Save Account</button>
+          <button type="button" class="btn btn-secondary" onclick="testAccountLogins()" id="btn-test-login">
+            <span class="btn-icon">🔍</span> Test Logins
+          </button>
+          <button type="submit" class="btn btn-primary" id="btn-save-account">
+            <span class="btn-icon">💾</span> Verify & Save
+          </button>
         </div>
       </form>
     </div>
