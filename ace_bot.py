@@ -599,9 +599,35 @@ def main():
         phone = phone[1:]
 
     if not phone or not args.password:
-        logger.error("Missing credentials! Please set ACE_PHONE and ACE_PASSWORD in .env or pass --phone and --password.")
-        logger.error("Example: python ace_bot.py --phone 0501234567 --password mypassword")
-        sys.exit(1)
+        import db
+        accounts = db.get_accounts()
+        enabled_accounts = [a for a in accounts if a.get("enabled")]
+        if enabled_accounts:
+            logger.info(f"No standalone CLI credentials provided. Running {len(enabled_accounts)} active account(s) from database...")
+            for idx, acc in enumerate(enabled_accounts, 1):
+                logger.info(f"\n========================================")
+                logger.info(f"Processing Account {idx}/{len(enabled_accounts)}: {acc['phone']} ({acc.get('label', '')})")
+                logger.info(f"========================================")
+                mode = acc.get("mode", "api")
+                acc_tasks = acc.get("max_tasks") or max_tasks
+                if mode == "browser":
+                    b = AcePlaywrightBot(base_url=args.base_url, phone=acc["phone"], password=acc["password"], headless=args.headless)
+                else:
+                    b = AceApiBot(base_url=args.base_url, phone=acc["phone"], password=acc["password"])
+                
+                stats = b.run(do_checkin=do_checkin, do_tasks=do_tasks, max_tasks=acc_tasks)
+                reporter = TelegramReporter(bot_token=args.telegram_token, chat_id=args.telegram_chat_id)
+                if reporter.is_configured:
+                    reporter.send_report(stats)
+
+                if idx < len(enabled_accounts):
+                    pacing = random.uniform(15.0, 25.0)
+                    logger.info(f"⏳ Cooldown pacing: waiting {pacing:.1f}s before next account...")
+                    time.sleep(pacing)
+            return
+        else:
+            logger.error("No accounts found! Please add accounts in the Web Dashboard (http://localhost:8000) or pass --phone and --password.")
+            sys.exit(1)
 
     do_checkin = not args.no_checkin and os.getenv("DO_CHECKIN", "true").lower() == "true"
     do_tasks = not args.no_tasks and os.getenv("DO_TASKS", "true").lower() == "true"
