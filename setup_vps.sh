@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Ace775 Linux VPS Setup Script
+# Ace775 Linux VPS Setup Script with Web Dashboard & Multi-Account Manager
 # Works on: Ubuntu 20.04+, Debian 11+, and similar Linux distributions.
 # ==============================================================================
 
 set -e
 
 echo "=================================================="
-echo "          Ace775 VPS Setup & Installation         "
+echo "      Ace775 VPS Setup & Web Dashboard Installer  "
 echo "=================================================="
 
 # 1. Update package list & install system dependencies
-echo "[1/4] Installing system dependencies (Python3, venv, curl)..."
+echo "[1/4] Installing system dependencies (Python3, venv, curl, system libraries)..."
 sudo apt-get update -y
 sudo apt-get install -y python3 python3-pip python3-venv curl libglib2.0-0 libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2
 
@@ -22,10 +22,9 @@ if [ ! -d "venv" ]; then
     echo "Created virtual environment 'venv'."
 fi
 
-# Activate venv
 source venv/bin/activate
 
-# 3. Upgrade pip and install requirements
+# 3. Upgrade pip and install requirements (FastAPI, Uvicorn, Playwright, Requests)
 echo "[3/4] Installing Python requirements..."
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -39,19 +38,15 @@ echo "=================================================="
 echo "  Installation Complete!"
 echo "=================================================="
 echo ""
-echo "Next Steps:"
-echo "1. Configure your credentials in .env:"
-echo "     nano .env"
-echo "   Set ACE_PHONE and ACE_PASSWORD."
-echo ""
-echo "2. Run a test manually:"
+echo "🚀 To launch the Web Dashboard:"
 echo "     source venv/bin/activate"
-echo "     python ace_bot.py --mode browser"
-echo "   Or use lightweight API mode (great for low-RAM VPS):"
+echo "     python app.py"
+echo "   Then open http://<your-vps-ip>:8000 in your browser!"
+echo ""
+echo "🤖 To run automation directly from CLI:"
 echo "     python ace_bot.py --mode api"
 echo ""
-echo "3. Automate with Cron (run daily at 8:00 AM):"
-echo "     crontab -e"
-echo "   Add the line below (adjust /path/to/task_ace):"
-echo "     0 8 * * * cd $(pwd) && ./venv/bin/python ace_bot.py >> cron.log 2>&1"
+echo "⚙️ To keep the Web Dashboard running in background (systemd):"
+echo "   Run the dashboard with nohup, tmux, or create a systemd service:"
+echo "     nohup ./venv/bin/python app.py > dashboard.log 2>&1 &"
 echo "=================================================="

@@ -1,6 +1,11 @@
 # Environment variables (Credentials)
 .env
 
+# Database files
+data/
+*.db
+*.sqlite3
+
 # Virtual environments
 venv/
 env/
@@ -11,11 +16,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Logs
+# Logs & temporary files
 *.log
 cron.log
 bot.log
-
-# Scratch scripts
+*.png
+check_site_response.py
 scratch/
 .pytest_cache/

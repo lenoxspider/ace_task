@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ace775 Automation Control Center</title>
+  <meta name="description" content="Multi-account automation control panel for Ace775 daily task claims and check-ins.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="brand-group">
+        <div class="brand-logo">⚡</div>
+        <div class="brand-text">
+          <h1>Ace775 Command Center</h1>
+          <p class="subtitle">Multi-Account Automation & Earnings Monitor</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-settings" class="btn btn-secondary" onclick="openSettingsModal()">
+          <span class="btn-icon">⚙️</span> Settings
+        </button>
+        <button id="btn-add-account" class="btn btn-secondary" onclick="openAccountModal()">
+          <span class="btn-icon">+</span> Add Account
+        </button>
+        <button id="btn-run-all" class="btn btn-primary" onclick="runAllAccounts()">
+          <span class="btn-icon">▶</span> Run All Active
+        </button>
+      </div>
+    </header>
+
+    <!-- Stats Banner -->
+    <section class="stats-grid" id="stats-section">
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">Total Accounts</span>
+          <span class="stat-icon">👥</span>
+        </div>
+        <div class="stat-value" id="stat-total-accounts">0</div>
+        <div class="stat-footer" id="stat-active-subtitle">0 active in rotation</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">Tasks Completed Today</span>
+          <span class="stat-icon">✅</span>
+        </div>
+        <div class="stat-value" id="stat-tasks-today">0</div>
+        <div class="stat-footer">Across all accounts</div>
+      </div>
+
+      <div class="stat-card accent-card">
+        <div class="stat-header">
+          <span class="stat-title">Total Earned Today</span>
+          <span class="stat-icon">💰</span>
+        </div>
+        <div class="stat-value" id="stat-earned-today">0.00 <span class="currency">GHS</span></div>
+        <div class="stat-footer">Direct account profits</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-title">Engine Status</span>
+          <span class="stat-icon">🟢</span>
+        </div>
+        <div class="stat-value status-active" id="stat-system-status">Ready</div>
+        <div class="stat-footer">Fast API & Playwright</div>
+      </div>
+    </section>
+
+    <!-- Main Section: Accounts Table & Console -->
+    <main class="main-content">
+      
+      <!-- Accounts Panel -->
+      <section class="content-panel accounts-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Configured Accounts</h2>
+            <span class="badge badge-count" id="badge-account-count">0</span>
+          </div>
+          <div class="panel-tools">
+            <input type="text" id="account-search" placeholder="Search phone or label..." oninput="filterAccounts()">
+          </div>
+        </div>
+
+        <div class="accounts-container" id="accounts-list">
+          <!-- Dynamically populated -->
+          <div class="empty-placeholder">Loading accounts...</div>
+        </div>
+      </section>
+
+      <!-- Live Terminal / Console Panel -->
+      <section class="content-panel terminal-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Live Automation Console</h2>
+            <span class="pulse-indicator"></span>
+          </div>
+          <div class="panel-tools">
+            <button class="btn btn-xs btn-ghost" onclick="clearTerminalLogs()">Clear</button>
+            <label class="toggle-label">
+              <input type="checkbox" id="chk-autoscroll" checked> Auto-scroll
+            </label>
+          </div>
+        </div>
+        <div class="terminal-body" id="terminal-logs">
+          <!-- Streaming log lines -->
+          <div class="log-line log-info">[SYSTEM] Connected to automation stream. Ready.</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Modal: Add/Edit Account -->
+  <div class="modal-overlay" id="account-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-title">Add New Account</h3>
+        <button class="modal-close" onclick="closeAccountModal()">&times;</button>
+      </div>
+      <form id="account-form" onsubmit="handleAccountSubmit(event)">
+        <input type="hidden" id="form-account-id">
+        
+        <div class="form-group">
+          <label for="form-phone">Phone Number (Ghana +233)</label>
+          <div class="input-with-prefix">
+            <span class="input-prefix">+233</span>
+            <input type="text" id="form-phone" placeholder="509295199" required autocomplete="off">
+          </div>
+          <span class="form-hint">Enter 9 digits without leading 0 or 10 digits with 0.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="form-password">Password</label>
+          <input type="text" id="form-password" placeholder="Account password" required autocomplete="off">
+        </div>
+
+        <div class="form-group">
+          <label for="form-label">Nickname / Label</label>
+          <input type="text" id="form-label" placeholder="e.g. Main Account, User 2">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="form-mode">Mode</label>
+            <select id="form-mode">
+              <option value="api">Direct API (Recommended - Fast & Lightweight)</option>
+              <option value="browser">Playwright Headless Browser (Full SPA)</option>
+            </select>
+          </div>
+          <div class="form-group flex-1">
+            <label for="form-max-tasks">Max Tasks Limit</label>
+            <input type="number" id="form-max-tasks" min="0" value="0" placeholder="0 = All tasks">
+          </div>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="form-enabled" checked> Enable this account for batch runs
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeAccountModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-account">Save Account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Settings (Telegram, Base URL) -->
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>System Settings</h3>
+        <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+      </div>
+      <form id="settings-form" onsubmit="handleSettingsSubmit(event)">
+        <div class="form-group">
+          <label for="set-base-url">Website Base URL</label>
+          <input type="text" id="set-base-url" value="https://ace775.com" required>
+        </div>
+
+        <div class="form-group">
+          <label for="set-tg-token">Telegram Bot Token</label>
+          <input type="text" id="set-tg-token" placeholder="8447722246:AAG9_XVP..." autocomplete="off">
+          <span class="form-hint">From @BotFather on Telegram.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="set-tg-chat">Telegram Chat ID</label>
+          <input type="text" id="set-tg-chat" placeholder="5511238401" autocomplete="off">
+          <span class="form-hint">Your numeric ID from @userinfobot.</span>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Close</button>
+          <button type="submit" class="btn btn-primary">Save Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

@@ -1,120 +1,115 @@
-# Ace775 Automation Bot (Linux VPS & Local)
+# Ace775 Automation & Multi-Account Web Dashboard
 
-Automated script for **ace775.com** designed for scheduled daily execution on a Linux VPS or local machine.
-
----
-
-## Features
-- **Account Login**: Automatic authentication via Phone number and Password (no SMS or captcha needed).
-- **Daily Sign-In / Check-in**: Automatically claims daily attendance points.
-- **Daily Tasks Automation**:
-  - Scans all ongoing/incomplete tasks.
-  - Opens task details.
-  - Waits for video/timer countdown.
-  - Submits task completion for rewards.
-  - Handles 5-star rating confirmation modals automatically.
-- **Dual Engine**:
-  - **Playwright Headless Browser Mode**: Real mobile browser emulation, full JavaScript execution, handles Vue animations and dialogs.
-  - **Direct API Mode**: Ultra-fast HTTP requests mode (requires < 30MB RAM, perfect for 512MB/1GB Linux VPS).
+Automated bot and modern web control panel for **ace775.com**, designed for scheduled daily execution on a Linux VPS or local machine.
 
 ---
 
-## Project Structure
+## ⚡ Features
+- **Modern Web Dashboard**: Sleek dark-mode interface built with FastAPI, Vanilla CSS, and JavaScript.
+- **Multi-Account Manager**: Add, edit, delete, and enable/disable multiple accounts with nicknames, phone numbers, and max-task limits.
+- **One-Click & Batch Execution**: Run all active accounts sequentially with one click ("Run All Active") or run individual accounts on demand.
+- **Live Terminal Console**: Stream real-time logs via Server-Sent Events (SSE) directly into the dashboard console.
+- **Stats Overview**: Track total accounts, daily tasks completed, and total earnings in GHS.
+- **Daily Telegram Reports**: Receive detailed summary reports per run directly to your Telegram chat.
+- **Dual Execution Engine**:
+  - **Direct API Mode (Recommended)**: Ultra-fast HTTP mode requiring `< 30MB RAM` (ideal for budget Linux VPS).
+  - **Playwright Headless Browser Mode**: Real mobile browser emulation (`w750` mobile SPA viewport / 375x812).
+
+---
+
+## 📁 Project Structure
 
 ```text
 task_ace/
-├── ace_bot.py          # Main automation script (Playwright & Direct API modes)
-├── setup_vps.sh        # One-command installer for Linux VPS (Ubuntu/Debian)
-├── requirements.txt    # Python packages (playwright, requests, python-dotenv)
-├── .env.example        # Environment variables template
-├── .env                # Your active credentials and configuration
-└── README.md           # Documentation and guides
+├── app.py                  # FastAPI web server, REST API, & background task runner
+├── db.py                   # SQLite database manager for accounts & settings
+├── ace_bot.py              # Core automation engine (API & Playwright bots)
+├── setup_vps.sh            # 1-command installer script for Linux VPS (Ubuntu/Debian)
+├── requirements.txt        # Python packages (FastAPI, Uvicorn, Playwright, Requests, etc.)
+├── .env.example            # Environment variables template
+├── .env                    # Active local credentials (gitignored)
+├── static/
+│   ├── css/
+│   │   └── dashboard.css   # Dark-mode glassmorphic styling
+│   ├── js/
+│   │   └── dashboard.js    # Reactive frontend logic & SSE log streaming
+│   └── index.html          # Semantic single-page dashboard
+└── README.md               # Documentation and guides
 ```
 
 ---
 
-## Quick Start on Linux VPS (Ubuntu / Debian)
+## 🚀 Quick Start on Local Machine
 
-### 1. Upload or Clone the folder to your VPS
+1. Open a terminal in `task_ace`:
+   ```bash
+   python app.py
+   ```
+2. Open your browser and go to:
+   ```text
+   http://localhost:8000
+   ```
+3. Use the **+ Add Account** button to add your phone numbers and passwords.
+4. Click **▶ Run** on any account or **▶ Run All Active** to start automation!
+
+---
+
+## 🌐 Quick Start on Linux VPS (Ubuntu / Debian)
+
+### 1. Upload or Clone the Repository
 ```bash
-# Example: place in ~/task_ace
-cd ~/task_ace
+git clone https://github.com/lenoxspider/ace_task.git
+cd ace_task
 ```
 
 ### 2. Run the Setup Script
-Make the setup script executable and run it:
 ```bash
 chmod +x setup_vps.sh
 ./setup_vps.sh
 ```
-This will automatically:
-- Install Python 3, pip, venv, and required system libraries.
-- Create a virtual environment `venv`.
-- Install Python dependencies (`requirements.txt`).
-- Download and configure Playwright Chromium with system dependencies.
 
-### 3. Set Your Credentials
-Edit `.env` with your editor:
-```bash
-nano .env
-```
-Fill in your phone number and password:
-```env
-ACE_PHONE=0501234567
-ACE_PASSWORD=your_password_here
-ACE_MODE=browser
-ACE_HEADLESS=true
-DO_CHECKIN=true
-DO_TASKS=true
-ACE_BASE_URL=https://ace775.com
-```
-
-### 4. Test the Bot
-Activate the virtual environment and run:
+### 3. Launch the Web Dashboard
 ```bash
 source venv/bin/activate
+python app.py
+```
+*(Access the dashboard at `http://<YOUR-VPS-IP>:8000`)*
 
-# Test in Playwright Browser mode:
-python ace_bot.py --mode browser
+### 4. Running 24/7 in Background on VPS (systemd or nohup)
+To keep the dashboard alive after closing SSH:
+```bash
+nohup ./venv/bin/python app.py > dashboard.log 2>&1 &
+```
 
-# Or test in Direct API mode (fast):
-python ace_bot.py --mode api
+Or configure a systemd service:
+```bash
+sudo nano /etc/systemd/system/ace-dashboard.service
+```
+```ini
+[Unit]
+Description=Ace775 Web Dashboard
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/root/ace_task
+ExecStart=/root/ace_task/venv/bin/python app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable ace-dashboard
+sudo systemctl start ace-dashboard
 ```
 
 ---
 
-## Daily Scheduling with Cron
-
-To run the bot automatically every day (e.g. at 08:30 AM every morning):
-
-1. Open crontab:
-```bash
-crontab -e
-```
-
-2. Add this line at the bottom (replace `/root/task_ace` with your actual path):
-```cron
-30 8 * * * cd /root/task_ace && ./venv/bin/python ace_bot.py >> /root/task_ace/bot.log 2>&1
-```
-
-3. Save and exit. The bot will now run every morning, complete all daily tasks and check-in, and log the output to `bot.log`.
-
----
-
-## Command Line Arguments
-
-You can also pass arguments directly without modifying `.env`:
-
-```bash
-# Run with custom credentials:
-python ace_bot.py --phone 0501234567 --password mypassword
-
-# Run only tasks (skip check-in):
-python ace_bot.py --no-checkin
-
-# Run only check-in (skip tasks):
-python ace_bot.py --no-tasks
-
-# Run in Direct API mode:
-python ace_bot.py --mode api
-```
+## 📱 Telegram Notifications Setup
+Click the **⚙️ Settings** button on the top right of the dashboard:
+1. Enter your `Telegram Bot Token` (from [@BotFather](https://t.me/BotFather)).
+2. Enter your `Telegram Chat ID` (from [@userinfobot](https://t.me/userinfobot)).
+3. Click **Save Settings**.
+The bot will now automatically send a formatted summary report whenever accounts are run!

@@ -1,0 +1,307 @@
+"""
+FastAPI Multi-Account Web Dashboard for Ace775 Bot
+Provides REST APIs, SSE real-time log streaming, and static UI.
+"""
+
+import os
+import sys
+import time
+import asyncio
+import logging
+from datetime import datetime
+from typing import Optional, Dict, Any, List
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+import uvicorn
+
+import db
+from ace_bot import AceApiBot, AcePlaywrightBot, TelegramReporter
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("AceApp")
+
+app = FastAPI(title="Ace775 Web Dashboard", version="1.0.0")
+
+# Mount static folder
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+os.makedirs(STATIC_DIR, exist_ok=True)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# In-memory log buffer and SSE subscriber queues
+MAX_LOG_HISTORY = 300
+log_history: List[Dict[str, Any]] = []
+log_subscribers: List[asyncio.Queue] = []
+is_running_lock = False
+
+
+def broadcast_log(message: str, level: str = "info"):
+    """Broadcast a log entry to in-memory history and active SSE streams."""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    entry = {"timestamp": timestamp, "message": message, "level": level}
+    log_history.append(entry)
+    if len(log_history) > MAX_LOG_HISTORY:
+        log_history.pop(0)
+
+    # Dispatch to SSE listeners
+    dead_queues = []
+    for q in log_subscribers:
+        try:
+            q.put_nowait(entry)
+        except Exception:
+            dead_queues.append(q)
+    for dq in dead_queues:
+        if dq in log_subscribers:
+            log_subscribers.remove(dq)
+
+
+# ==============================================================================
+# Execution Workers
+# ==============================================================================
+def run_single_account(account_id: int):
+    global is_running_lock
+    account = db.get_account(account_id)
+    if not account:
+        broadcast_log(f"Account ID {account_id} not found!", "error")
+        return
+
+    phone = account["phone"]
+    pwd = account["password"]
+    label = account.get("label") or phone
+    mode = account.get("mode", "api")
+    max_tasks = account.get("max_tasks", 0)
+    base_url = db.get_setting("base_url", "https://ace775.com")
+
+    broadcast_log(f"🚀 Starting run for '{label}' ({phone}) in {mode.upper()} mode...", "info")
+    db.update_account_stats(account_id, last_status="Running...")
+
+    stats: Dict[str, Any] = {}
+    try:
+        if mode == "browser":
+            bot = AcePlaywrightBot(base_url=base_url, phone=phone, password=pwd, headless=True)
+            stats = bot.run(do_checkin=True, do_tasks=True, max_tasks=max_tasks if max_tasks > 0 else None)
+        else:
+            bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
+            stats = bot.run(do_checkin=True, do_tasks=True, max_tasks=max_tasks if max_tasks > 0 else None)
+
+        balance = stats.get("balance", "0")
+        grade = stats.get("grade", "N/A")
+        tasks = stats.get("tasks", [])
+        total_earned = stats.get("total_earned", 0.0)
+        status_msg = "Completed"
+        if stats.get("error"):
+            status_msg = stats["error"]
+
+        db.update_account_stats(
+            account_id,
+            vip_level=grade,
+            balance=balance,
+            last_status=status_msg,
+            tasks_done=len(tasks),
+            earned=total_earned
+        )
+
+        broadcast_log(
+            f"✅ Finished '{label}': VIP {grade}, Balance {balance} GHS, Tasks {len(tasks)}, Earned +{total_earned:.2f} GHS ({status_msg})",
+            "success" if not stats.get("error") else "warning"
+        )
+
+        # Telegram report
+        tg_token = db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", ""))
+        tg_chat = db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", ""))
+        reporter = TelegramReporter(bot_token=tg_token, chat_id=tg_chat)
+        if reporter.is_configured:
+            reporter.send_report(stats)
+
+    except Exception as e:
+        logger.error(f"Error running account {phone}: {e}", exc_info=True)
+        broadcast_log(f"❌ Error on '{label}': {str(e)}", "error")
+        db.update_account_stats(account_id, last_status=f"Failed: {str(e)[:30]}")
+
+
+def run_all_enabled_accounts():
+    global is_running_lock
+    if is_running_lock:
+        broadcast_log("⚠️ An execution job is already in progress!", "warning")
+        return
+
+    is_running_lock = True
+    try:
+        accounts = db.get_accounts()
+        enabled_accounts = [a for a in accounts if a["enabled"]]
+        broadcast_log(f"📋 Starting batch execution for {len(enabled_accounts)} active account(s)...", "info")
+
+        for idx, acc in enumerate(enabled_accounts, 1):
+            broadcast_log(f"\n--- Processing account {idx}/{len(enabled_accounts)}: {acc['phone']} ---", "info")
+            run_single_account(acc["id"])
+            time.sleep(3)
+
+        broadcast_log("🎉 Batch execution for all active accounts finished!", "success")
+    finally:
+        is_running_lock = False
+
+
+# ==============================================================================
+# Pydantic Request Models
+# ==============================================================================
+class AccountCreate(BaseModel):
+    phone: str
+    password: str
+    label: Optional[str] = ""
+    max_tasks: Optional[int] = 0
+    mode: Optional[str] = "api"
+    enabled: Optional[int] = 1
+
+
+class AccountUpdate(BaseModel):
+    phone: Optional[str] = None
+    password: Optional[str] = None
+    label: Optional[str] = None
+    max_tasks: Optional[int] = None
+    mode: Optional[str] = None
+    enabled: Optional[int] = None
+
+
+class SettingsUpdate(BaseModel):
+    telegram_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    base_url: Optional[str] = None
+
+
+# ==============================================================================
+# API Routes
+# ==============================================================================
+@app.get("/", response_class=HTMLResponse)
+def index_view():
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return HTMLResponse("<h1>Ace775 Dashboard static file missing.</h1>")
+
+
+@app.get("/api/accounts")
+def get_accounts_api():
+    return db.get_accounts()
+
+
+@app.post("/api/accounts")
+def create_account_api(item: AccountCreate):
+    try:
+        acc = db.add_account(
+            phone=item.phone,
+            password=item.password,
+            label=item.label or "",
+            max_tasks=item.max_tasks or 0,
+            mode=item.mode or "api",
+            enabled=item.enabled if item.enabled is not None else 1
+        )
+        broadcast_log(f"Added new account '{acc['label']}' ({acc['phone']})", "info")
+        return acc
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to add account: {str(e)}")
+
+
+@app.put("/api/accounts/{account_id}")
+def update_account_api(account_id: int, item: AccountUpdate):
+    acc = db.update_account(
+        account_id=account_id,
+        phone=item.phone,
+        password=item.password,
+        label=item.label,
+        max_tasks=item.max_tasks,
+        mode=item.mode,
+        enabled=item.enabled
+    )
+    if not acc:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return acc
+
+
+@app.delete("/api/accounts/{account_id}")
+def delete_account_api(account_id: int):
+    ok = db.delete_account(account_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Account not found")
+    broadcast_log(f"Deleted account ID {account_id}", "warning")
+    return {"status": "deleted"}
+
+
+@app.post("/api/accounts/{account_id}/run")
+def trigger_single_run(account_id: int, background_tasks: BackgroundTasks):
+    account = db.get_account(account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    background_tasks.add_task(run_single_account, account_id)
+    return {"status": "started", "message": f"Run queued for {account['phone']}"}
+
+
+@app.post("/api/run-all")
+def trigger_run_all(background_tasks: BackgroundTasks):
+    global is_running_lock
+    if is_running_lock:
+        return JSONResponse(status_code=400, content={"status": "busy", "message": "A job is already running!"})
+    background_tasks.add_task(run_all_enabled_accounts)
+    return {"status": "started", "message": "Batch execution started in background"}
+
+
+@app.get("/api/stats")
+def get_stats_api():
+    return db.get_dashboard_stats()
+
+
+@app.get("/api/logs/history")
+def get_log_history():
+    return log_history
+
+
+@app.get("/api/logs/stream")
+async def stream_logs(request: Request):
+    """Server-Sent Events (SSE) log stream for the web console."""
+    queue = asyncio.Queue()
+    log_subscribers.append(queue)
+
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    entry = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {entry['timestamp']} [{entry['level'].upper()}] {entry['message']}\n\n"
+                except asyncio.TimeoutError:
+                    # Keepalive ping
+                    yield ": ping\n\n"
+        finally:
+            if queue in log_subscribers:
+                log_subscribers.remove(queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.get("/api/settings")
+def get_settings_api():
+    return {
+        "telegram_token": db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", "")),
+        "telegram_chat_id": db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", "")),
+        "base_url": db.get_setting("base_url", "https://ace775.com")
+    }
+
+
+@app.post("/api/settings")
+def update_settings_api(data: SettingsUpdate):
+    if data.telegram_token is not None:
+        db.set_setting("telegram_token", data.telegram_token.strip())
+    if data.telegram_chat_id is not None:
+        db.set_setting("telegram_chat_id", data.telegram_chat_id.strip())
+    if data.base_url is not None:
+        db.set_setting("base_url", data.base_url.strip())
+    broadcast_log("Settings updated.", "info")
+    return {"status": "saved"}
+
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))
+    broadcast_log(f"Web Dashboard started on http://0.0.0.0:{port}", "info")
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
