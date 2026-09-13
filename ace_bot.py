@@ -19,6 +19,7 @@ import time
 import random
 import logging
 import argparse
+import hashlib
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from dotenv import load_dotenv
@@ -138,6 +139,29 @@ class TelegramReporter:
         return self.send_message("\n".join(lines))
 
 
+# Common mobile devices used in Ghana (Tecno, Infinix, Samsung, iPhone)
+MOBILE_USER_AGENTS = [
+    "Mozilla/5.0 (Linux; Android 13; TECNO CK7n Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 12; Infinix X6816D Build/SP1A.210812.016) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.163 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13; SM-A145F Build/TP1A.220624.014) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.143 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 12; SM-A037F Build/SP1A.210812.016) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.80 Mobile Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+]
+
+
+def get_account_user_agent(phone: str) -> str:
+    """Deterministically assign a consistent, realistic mobile User-Agent per account."""
+    idx = int(hashlib.md5(phone.encode()).hexdigest(), 16) % len(MOBILE_USER_AGENTS)
+    return MOBILE_USER_AGENTS[idx]
+
+
+def get_account_device_fingerprint(phone: str) -> str:
+    """Generates a realistic 32-character hexadecimal device fingerprint matching Ace775 H5 client."""
+    seed = f"ace775_h5_device_{phone}_sec"
+    return hashlib.md5(seed.encode("utf-8")).hexdigest()
+
+
 # ==============================================================================
 # Direct API Mode (Lightweight & Fast for Linux VPS / Local Testing)
 # ==============================================================================
@@ -148,16 +172,19 @@ class AceApiBot:
         self.phone = phone
         self.password = password
         self.session = requests.Session()
+        ua = get_account_user_agent(phone)
         self.session.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
-                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 "
-                "Mobile/15E148 Safari/604.1"
-            ),
+            "User-Agent": ua,
             "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9,en-GH;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
             "Content-Type": "application/json;charset=UTF-8",
             "Referer": f"{self.base_url}/",
             "Origin": self.base_url,
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "X-Requested-With": "XMLHttpRequest",
         })
         self.token: Optional[str] = None
         self.user_info: Dict[str, Any] = {}
@@ -212,6 +239,9 @@ class AceApiBot:
         elif len(clean) == 10 and clean.startswith("0"):
             candidates.append(clean[1:])
 
+        device_fp = get_account_device_fingerprint(clean)
+        login_idx = f"H5{device_fp}"
+
         last_msg = ""
         for phone_candidate in candidates:
             logger.info(f"[API] Attempting login for phone: {phone_candidate}...")
@@ -219,7 +249,7 @@ class AceApiBot:
                 "username": phone_candidate,
                 "password": self.password,
                 "log_type": 1,
-                "login_idx": "H5_automation_bot"
+                "login_idx": login_idx
             }
             res = self._post("/api/Login/login", payload)
 
@@ -507,13 +537,20 @@ class AceApiBot:
                 if isinstance(detail_data, dict):
                     limits = int(detail_data.get("limits", 5))
 
+            # Human scan delay: pause 1.2s - 2.2s after loading task details (simulating reading/viewing)
+            time.sleep(random.uniform(1.2, 2.2))
+
             limits = max(limits, 5)
-            logger.info(f"[API] Waiting for task countdown timer: {limits}s (with human jitter)...")
+            logger.info(f"[API] Watching task countdown: {limits}s...")
             for remaining in range(limits, 0, -1):
                 sys.stdout.write(f"\r  Countdown: {remaining}s remaining... ")
                 sys.stdout.flush()
-                time.sleep(random.uniform(0.96, 1.06))
+                time.sleep(random.uniform(0.98, 1.06))
             print()
+
+            # Human reaction delay: pause 1.2s - 2.8s after countdown hits zero before tapping complete
+            react_delay = random.uniform(1.2, 2.8)
+            time.sleep(react_delay)
 
             comp_res = self._post("/api/Task/completeTask", {"task_id": task_id})
             if isinstance(comp_res, dict) and comp_res.get("code") == 1:
@@ -531,9 +568,9 @@ class AceApiBot:
                     self.stats["error"] = f"Tasks suspended by platform: {msg}"
                     break
 
-            # Natural human delay before moving to next task (3.5s - 6.5s)
-            cooldown = random.uniform(3.5, 6.5)
-            logger.info(f"[API] Human delay: pausing {cooldown:.1f}s before next task...")
+            # Natural human delay before moving to next task (4.0s - 8.5s)
+            cooldown = random.uniform(4.0, 8.5)
+            logger.info(f"[API] Human cooldown: pausing {cooldown:.1f}s before next task...")
             time.sleep(cooldown)
 
         logger.info(f"[API] Finished processing tasks.")
