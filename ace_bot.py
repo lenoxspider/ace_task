@@ -5,9 +5,10 @@ Supports:
   2. Direct API Mode (Ultra-lightweight HTTP mode for low-memory VPS)
 
 Features:
-  - Phone + Password Login with Error Detection
+  - Phone + Password Login with Error Detection & Auto-Formatting
   - Daily Sign-in / Check-in
   - Automated Daily Task Execution (with countdown timer & rating submission)
+  - Working hours & Sunday restriction detection
   - Configurable task limit (e.g. --max-tasks 3 for testing)
   - Daily Telegram Report Notification
 """
@@ -100,7 +101,7 @@ class TelegramReporter:
             lines.append(f"💵 <b>Total Earned:</b> +{total_earned:.2f} {currency}")
 
         if stats.get("error"):
-            lines.extend(["", f"⚠️ <b>Notice:</b> {stats['error']}"])
+            lines.extend(["", f"ℹ️ <b>Status Note:</b> {stats['error']}"])
 
         lines.extend(["", "✅ <i>Finished.</i>"])
         return self.send_message("\n".join(lines))
@@ -281,10 +282,14 @@ class AceApiBot:
             else:
                 msg = comp_res.get("msg", "Unknown response")
                 logger.warning(f"[API] Task completion response: {msg}")
+                if "working hours" in msg.lower() or "forbid" in msg.lower() or "sunday" in msg.lower():
+                    logger.warning(f"[API] Halting task execution: Server indicates '{msg}'")
+                    self.stats["error"] = f"Tasks suspended by platform: {msg}"
+                    break
 
             time.sleep(2)
 
-        logger.info(f"[API] Finished executing {len(self.stats['tasks'])} task(s).")
+        logger.info(f"[API] Finished processing tasks.")
         self.fetch_user_info()
         return True
 
@@ -317,6 +322,11 @@ class AcePlaywrightBot:
             "currency": "GHS"
         }
 
+    def _navigate_spa(self, page, hash_path: str):
+        page.evaluate(f"() => {{ window.location.hash = '{hash_path}'; }}")
+        page.wait_for_timeout(2000)
+        self._dismiss_popups(page)
+
     def run(self, do_checkin: bool = True, do_tasks: bool = True, max_tasks: Optional[int] = None) -> Dict[str, Any]:
         from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
@@ -344,7 +354,7 @@ class AcePlaywrightBot:
                 has_touch=True
             )
             page = context.new_page()
-            page.on("dialog", lambda dialog: dialog.accept())
+            page.on("dialog", lambda dialog: (logger.info(f"[Browser] Dialog: '{dialog.message}'"), dialog.accept()))
 
             try:
                 # 1. Login
@@ -368,11 +378,10 @@ class AcePlaywrightBot:
 
                 page.wait_for_timeout(3000)
 
-                # Check for error dialog popup
                 dialog_msg = page.locator(".van-dialog__message").first
                 if dialog_msg.is_visible():
                     err_txt = dialog_msg.inner_text().strip()
-                    logger.error(f"[Browser] Login alert received: '{err_txt}'")
+                    logger.error(f"[Browser] Login alert: '{err_txt}'")
                     self.stats["error"] = f"Login Error: {err_txt}"
                     self._dismiss_popups(page)
                     return self.stats
@@ -389,9 +398,7 @@ class AcePlaywrightBot:
                 # 2. Daily Sign-In / Check-in
                 if do_checkin:
                     logger.info(f"[Browser] Navigating to Check-in page ({self.base_url}/#/checkin)...")
-                    page.goto(f"{self.base_url}/#/checkin", wait_until="networkidle", timeout=20000)
-                    page.wait_for_timeout(2000)
-                    self._dismiss_popups(page)
+                    self._navigate_spa(page, "#/checkin")
 
                     checkin_btn = page.locator("button:has-text('Check In Now'), button:has-text('立即签到'), .btnWarp button").first
                     if checkin_btn.is_visible():
@@ -407,14 +414,12 @@ class AcePlaywrightBot:
                             self.stats["checkin_status"] = "✅ Successfully signed in"
                     else:
                         logger.info("[Browser] Check-in button not active or already checked in.")
-                        self.stats["checkin_status"] = "ℹ️ Not available / already done"
+                        self.stats["checkin_status"] = "ℹ️ Already checked in / not available"
 
                 # 3. Daily Tasks
                 if do_tasks:
                     logger.info(f"[Browser] Navigating to Tasks page ({self.base_url}/#/task)...")
-                    page.goto(f"{self.base_url}/#/task", wait_until="networkidle", timeout=20000)
-                    page.wait_for_timeout(2500)
-                    self._dismiss_popups(page)
+                    self._navigate_spa(page, "#/task")
 
                     task_items = page.locator(".grid2 ul li, .taskList li, .contWarp ul li")
                     count = task_items.count()
@@ -431,10 +436,7 @@ class AcePlaywrightBot:
                                 logger.info(f"[Browser] Reached requested limit of {target_tasks} task(s). Stopping.")
                                 break
 
-                            page.goto(f"{self.base_url}/#/task", wait_until="networkidle", timeout=20000)
-                            page.wait_for_timeout(2000)
-                            self._dismiss_popups(page)
-
+                            self._navigate_spa(page, "#/task")
                             current_items = page.locator(".grid2 ul li, .taskList li, .contWarp ul li")
                             if i >= current_items.count():
                                 break
@@ -458,18 +460,31 @@ class AcePlaywrightBot:
                                 pass
 
                             logger.info(f"\n--- [Browser] Starting Task {i+1} ('{title}') [Run task {completed_in_run+1}/{target_tasks}] ---")
-                            item.click()
+                            
+                            # Click the submit button inside the task card
+                            card_btn = item.locator("button, .btnWarp button").first
+                            if card_btn.is_visible():
+                                card_btn.click()
+                            else:
+                                item.click()
                             page.wait_for_timeout(2000)
+
+                            # Check for platform modal alert (e.g. "Outside working hours", "No tasks on Sundays")
+                            dialog_msg = page.locator(".van-dialog__message").first
+                            if dialog_msg.is_visible():
+                                alert_text = dialog_msg.inner_text().strip()
+                                logger.warning(f"[Browser] Platform Notice: '{alert_text}'")
+                                self.stats["error"] = f"Tasks suspended by platform: {alert_text}"
+                                self._dismiss_popups(page)
+                                break
 
                             logger.info(f"[Browser] Currently on: {page.url}")
                             countdown_elem = page.locator(".btnWarp button, .detailsWarp .btnWarp").first
-                            if countdown_elem.is_visible():
-                                logger.info(f"[Browser] Task button: {countdown_elem.inner_text().strip()}")
 
                             max_wait = 30
-                            while max_wait > 0:
+                            while max_wait > 0 and page.url.endswith("tDetails"):
                                 btn_txt = countdown_elem.inner_text().strip() if countdown_elem.is_visible() else ""
-                                if "Completed" in btn_txt or "已完成" in btn_txt or not page.url.endswith("tDetails"):
+                                if "Completed" in btn_txt or "已完成" in btn_txt:
                                     logger.info("[Browser] Task completed!")
                                     completed_in_run += 1
                                     self.stats["tasks"].append({"title": title, "amount": amount})
@@ -495,11 +510,11 @@ class AcePlaywrightBot:
 
                             page.wait_for_timeout(2000)
 
-                    logger.info("[Browser] All requested daily tasks processed!")
+                    logger.info("[Browser] Finished processing daily tasks.")
 
+                # Retrieve balance and grade from /#/user
                 try:
-                    page.goto(f"{self.base_url}/#/user", wait_until="networkidle", timeout=15000)
-                    page.wait_for_timeout(1500)
+                    self._navigate_spa(page, "#/user")
                     balance_el = page.locator(".money, .accountBalance, .userMoney, .van-nav-bar__title").first
                     if balance_el.is_visible():
                         self.stats["balance"] = balance_el.inner_text().strip()
@@ -559,7 +574,15 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.phone or not args.password:
+    phone = args.phone.strip()
+    if phone.startswith("+233"):
+        phone = phone[4:]
+    elif phone.startswith("233"):
+        phone = phone[3:]
+    elif phone.startswith("0") and len(phone) == 10:
+        phone = phone[1:]
+
+    if not phone or not args.password:
         logger.error("Missing credentials! Please set ACE_PHONE and ACE_PASSWORD in .env or pass --phone and --password.")
         logger.error("Example: python ace_bot.py --phone 0501234567 --password mypassword")
         sys.exit(1)
@@ -572,7 +595,7 @@ def main():
     logger.info("           Ace775 Automation Bot        ")
     logger.info("========================================")
     logger.info(f"Target    : {args.base_url}")
-    logger.info(f"Phone     : {args.phone}")
+    logger.info(f"Phone     : {phone}")
     logger.info(f"Mode      : {args.mode.upper()}")
     logger.info(f"Max Tasks : {max_tasks if max_tasks else 'All'}")
     logger.info(f"Check-in  : {do_checkin} | Tasks: {do_tasks}")
@@ -580,10 +603,10 @@ def main():
 
     stats: Dict[str, Any] = {}
     if args.mode == "api":
-        bot = AceApiBot(base_url=args.base_url, phone=args.phone, password=args.password)
+        bot = AceApiBot(base_url=args.base_url, phone=phone, password=args.password)
         stats = bot.run(do_checkin=do_checkin, do_tasks=do_tasks, max_tasks=max_tasks)
     else:
-        bot = AcePlaywrightBot(base_url=args.base_url, phone=args.phone, password=args.password, headless=args.headless)
+        bot = AcePlaywrightBot(base_url=args.base_url, phone=phone, password=args.password, headless=args.headless)
         stats = bot.run(do_checkin=do_checkin, do_tasks=do_tasks, max_tasks=max_tasks)
 
     # Send Telegram notification if configured
