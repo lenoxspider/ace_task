@@ -238,11 +238,40 @@ class AceApiBot:
             data = res.get("data", {})
             self.user_info = data
             username = data.get("username", self.phone)
-            balance = data.get("money", "0")
-            grade = data.get("grade_name", data.get("grade", "N/A"))
-            self.stats["balance"] = balance
+
+            # Extract VIP Grade
+            usergrade = data.get("usergrade", {}) if isinstance(data.get("usergrade"), dict) else {}
+            grade = usergrade.get("name") or usergrade.get("title") or data.get("grade_name") or data.get("grade") or "N/A"
+            if isinstance(grade, (int, float)) or (isinstance(grade, str) and str(grade).isdigit()):
+                grade = f"VIP {grade}"
+            elif isinstance(grade, str) and not grade.upper().startswith("VIP") and grade != "N/A":
+                grade = f"VIP {grade}"
+
+            # Extract Account Wallet Balances (personal balance vs task income)
+            account_data = data.get("account", {}) if isinstance(data.get("account"), dict) else {}
+            try:
+                personal_bal = float(account_data.get("balance") or data.get("balance") or data.get("money") or 0.0)
+            except (ValueError, TypeError):
+                personal_bal = 0.0
+
+            try:
+                income_bal = float(account_data.get("income") or 0.0)
+            except (ValueError, TypeError):
+                income_bal = 0.0
+
+            total_bal = personal_bal + income_bal
+            if personal_bal > 0 and income_bal == 0:
+                display_balance = f"{personal_bal:.2f}"
+            elif income_bal > 0 and personal_bal == 0:
+                display_balance = f"{income_bal:.2f}"
+            else:
+                display_balance = f"{total_bal:.2f}"
+
+            self.stats["personal_balance"] = f"{personal_bal:.2f}"
+            self.stats["income_balance"] = f"{income_bal:.2f}"
+            self.stats["balance"] = display_balance
             self.stats["grade"] = grade
-            logger.info(f"[API] User: {username} | VIP Level: {grade} | Balance: {balance}")
+            logger.info(f"[API] User: {username} | VIP Level: {grade} | Personal: {personal_bal:.2f} GHS | Income: {income_bal:.2f} GHS | Usable: {display_balance} GHS")
 
     def do_checkin(self) -> bool:
         logger.info("[API] Checking daily sign-in status...")
