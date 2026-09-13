@@ -74,21 +74,62 @@ fi
 python -c "import db; db.set_setting('dashboard_password', '$DASH_PASS')"
 echo "✅ Master password successfully saved!"
 
+# 6. Automatic 24/7 Background Service Setup (systemd)
 echo ""
 echo "=================================================="
-echo "  Installation Complete!"
+echo "[6/6] ⚙️ Configuring 24/7 Background Service"
+echo "=================================================="
+CURRENT_DIR=$(pwd)
+CURRENT_USER=$(whoami)
+SERVICE_FILE="/etc/systemd/system/ace775.service"
+
+if command -v systemctl >/dev/null 2>&1; then
+    echo "Creating automated systemd service at $SERVICE_FILE..."
+    sudo bash -c "cat <<EOF > $SERVICE_FILE
+[Unit]
+Description=Ace775 Automation Control Center & Scheduler
+After=network.target
+
+[Service]
+Type=simple
+User=$CURRENT_USER
+WorkingDirectory=$CURRENT_DIR
+ExecStart=$CURRENT_DIR/venv/bin/python $CURRENT_DIR/app.py
+Restart=always
+RestartSec=5
+StandardOutput=append:$CURRENT_DIR/dashboard.log
+StandardError=append:$CURRENT_DIR/dashboard.log
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable ace775
+    sudo systemctl restart ace775
+    echo "✅ 24/7 Background Service is active & enabled on boot!"
+else
+    echo "systemctl not detected. Starting in background with nohup..."
+    nohup ./venv/bin/python app.py > dashboard.log 2>&1 &
+fi
+
+echo ""
+echo "=================================================="
+echo "  🎉 Installation Complete & Running in Background!"
 echo "=================================================="
 echo ""
-echo "🚀 To launch the Web Dashboard:"
-echo "     source venv/bin/activate"
-echo "     python app.py"
-echo "   Then open http://<your-vps-ip>:8000 in your browser and enter your Master Password!"
+echo "🌐 Access your Web Dashboard:"
+echo "     http://<your-vps-ip>:8000"
+echo "   (Enter your Master Password to unlock!)"
 echo ""
-echo "🤖 To run automation directly from CLI:"
-echo "     python ace_bot.py --mode api"
+echo "📋 Manage Background Service:"
+echo "     Check status : sudo systemctl status ace775"
+echo "     View live log: tail -f dashboard.log"
+echo "     Restart      : sudo systemctl restart ace775"
+echo "     Stop         : sudo systemctl stop ace775"
 echo ""
-echo "⚙️ To keep the Web Dashboard running in background (systemd):"
-echo "   Run the dashboard with nohup, tmux, or create a systemd service:"
-echo "     nohup ./venv/bin/python app.py > dashboard.log 2>&1 &"
+echo "🤖 Two-Way Telegram Control:"
+echo "     Send /status, /balance, or /run directly to your bot anytime!"
 echo "=================================================="
+
 

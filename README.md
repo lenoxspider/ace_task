@@ -80,17 +80,29 @@ git clone https://github.com/lenoxspider/ace_task.git
 cd ace_task
 ```
 
-### 2. Run the Installer
+### 2. Run the 1-Command Installer
 ```bash
 chmod +x setup_vps.sh
 ./setup_vps.sh
 ```
-*The installer will prompt you to set your secret Master Password for the Web Dashboard.*
+*The installer will:*
+- Install all dependencies (Python, virtual environment, Playwright Chromium).
+- Interactively prompt you to set your secret **Master Password**.
+- Automatically configure and start the **24/7 background system service (`ace775.service`)** that auto-starts on VPS boot!
 
-### 3. Run 24/7 as a Background Service
+### 3. Access Your Dashboard & Control Bot
+Open your browser at `http://<YOUR-VPS-IP>:8000`, enter your Master Password, and manage all accounts!
+
+#### Useful Background Service Commands:
 ```bash
-nohup ./venv/bin/python app.py > dashboard.log 2>&1 &
-```
-*(Or use a systemd service as detailed in setup_vps.sh)*
+# Check if running
+sudo systemctl status ace775
 
-Access your dashboard at `http://<YOUR-VPS-IP>:8000` and unlock it with your Master Password!
+# View live dashboard and automation log
+tail -f dashboard.log
+
+# Restart or stop
+sudo systemctl restart ace775
+sudo systemctl stop ace775
+```
+
