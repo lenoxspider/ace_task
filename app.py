@@ -1,11 +1,12 @@
 """
 FastAPI Multi-Account Web Dashboard for Ace775 Bot
-Provides REST APIs, SSE real-time log streaming, and static UI.
+Provides REST APIs, SSE real-time log streaming, Smart Scheduler, Telegram Listener, and Analytics.
 """
 
 import os
 import sys
 import time
+import random
 import asyncio
 import logging
 from datetime import datetime
@@ -18,12 +19,14 @@ import uvicorn
 
 import db
 from ace_bot import AceApiBot, AcePlaywrightBot, TelegramReporter
+from scheduler import scheduler
+from telegram_listener import telegram_bot
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("AceApp")
 
-app = FastAPI(title="Ace775 Web Dashboard", version="1.0.0")
+app = FastAPI(title="Ace775 Web Dashboard", version="1.1.0")
 
 # Mount static folder
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -58,10 +61,9 @@ def broadcast_log(message: str, level: str = "info"):
 
 
 # ==============================================================================
-# Execution Workers
+# Execution Workers with Anti-Ban Pacing
 # ==============================================================================
 def run_single_account(account_id: int):
-    global is_running_lock
     account = db.get_account(account_id)
     if not account:
         broadcast_log(f"Account ID {account_id} not found!", "error")
@@ -136,16 +138,39 @@ def run_all_enabled_accounts():
         for idx, acc in enumerate(enabled_accounts, 1):
             broadcast_log(f"\n--- Processing account {idx}/{len(enabled_accounts)}: {acc['phone']} ---", "info")
             run_single_account(acc["id"])
-            time.sleep(3)
+
+            # Account pacing: randomized pause before next account (15s - 25s)
+            if idx < len(enabled_accounts):
+                pacing = random.uniform(15.0, 25.0)
+                broadcast_log(f"⏳ Account Pacing: waiting {pacing:.1f}s before next account...", "info")
+                time.sleep(pacing)
 
         broadcast_log("🎉 Batch execution for all active accounts finished!", "success")
     finally:
         is_running_lock = False
 
 
+# Connect callbacks to Scheduler and Telegram Listener
+scheduler.run_all_callback = run_all_enabled_accounts
+telegram_bot.run_all_callback = run_all_enabled_accounts
+
+
 # ==============================================================================
-# Pydantic Request Models
+# Lifecycle & Models
 # ==============================================================================
+@app.on_event("startup")
+def on_startup():
+    scheduler.start()
+    telegram_bot.start()
+    broadcast_log("⚡ Ace775 Control Center initialized with Auto-Scheduler and Telegram Listener.", "success")
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    scheduler.stop()
+    telegram_bot.stop()
+
+
 class AccountCreate(BaseModel):
     phone: str
     password: str
@@ -168,6 +193,10 @@ class SettingsUpdate(BaseModel):
     telegram_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     base_url: Optional[str] = None
+    schedule_time: Optional[str] = None
+    schedule_enabled: Optional[str] = None
+    auto_retry_outside_hours: Optional[str] = None
+    retry_interval_minutes: Optional[str] = None
 
 
 # ==============================================================================
@@ -251,6 +280,16 @@ def get_stats_api():
     return db.get_dashboard_stats()
 
 
+@app.get("/api/analytics/7days")
+def get_7days_analytics():
+    return db.get_last_7_days_analytics()
+
+
+@app.get("/api/scheduler")
+def get_scheduler_status():
+    return scheduler.get_status()
+
+
 @app.get("/api/logs/history")
 def get_log_history():
     return log_history
@@ -258,7 +297,6 @@ def get_log_history():
 
 @app.get("/api/logs/stream")
 async def stream_logs(request: Request):
-    """Server-Sent Events (SSE) log stream for the web console."""
     queue = asyncio.Queue()
     log_subscribers.append(queue)
 
@@ -271,7 +309,6 @@ async def stream_logs(request: Request):
                     entry = await asyncio.wait_for(queue.get(), timeout=15.0)
                     yield f"data: {entry['timestamp']} [{entry['level'].upper()}] {entry['message']}\n\n"
                 except asyncio.TimeoutError:
-                    # Keepalive ping
                     yield ": ping\n\n"
         finally:
             if queue in log_subscribers:
@@ -285,7 +322,11 @@ def get_settings_api():
     return {
         "telegram_token": db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", "")),
         "telegram_chat_id": db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", "")),
-        "base_url": db.get_setting("base_url", "https://ace775.com")
+        "base_url": db.get_setting("base_url", "https://ace775.com"),
+        "schedule_time": db.get_setting("schedule_time", "09:00"),
+        "schedule_enabled": db.get_setting("schedule_enabled", "1"),
+        "auto_retry_outside_hours": db.get_setting("auto_retry_outside_hours", "1"),
+        "retry_interval_minutes": db.get_setting("retry_interval_minutes", "30")
     }
 
 
@@ -297,11 +338,20 @@ def update_settings_api(data: SettingsUpdate):
         db.set_setting("telegram_chat_id", data.telegram_chat_id.strip())
     if data.base_url is not None:
         db.set_setting("base_url", data.base_url.strip())
-    broadcast_log("Settings updated.", "info")
+    if data.schedule_time is not None:
+        db.set_setting("schedule_time", data.schedule_time.strip())
+    if data.schedule_enabled is not None:
+        db.set_setting("schedule_enabled", data.schedule_enabled.strip())
+    if data.auto_retry_outside_hours is not None:
+        db.set_setting("auto_retry_outside_hours", data.auto_retry_outside_hours.strip())
+    if data.retry_interval_minutes is not None:
+        db.set_setting("retry_interval_minutes", data.retry_interval_minutes.strip())
+
+    broadcast_log("Settings and Auto-Scheduler updated.", "info")
     return {"status": "saved"}
 
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    broadcast_log(f"Web Dashboard started on http://0.0.0.0:{port}", "info")
+    broadcast_log(f"Web Dashboard running on http://0.0.0.0:{port}", "info")
     uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)

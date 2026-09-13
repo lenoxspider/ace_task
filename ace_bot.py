@@ -16,6 +16,7 @@ Features:
 import os
 import sys
 import time
+import random
 import logging
 import argparse
 from typing import Optional, Dict, Any, List
@@ -264,11 +265,11 @@ class AceApiBot:
                     limits = int(detail_data.get("limits", 5))
 
             limits = max(limits, 5)
-            logger.info(f"[API] Waiting for task countdown timer: {limits} seconds...")
+            logger.info(f"[API] Waiting for task countdown timer: {limits}s (with human jitter)...")
             for remaining in range(limits, 0, -1):
                 sys.stdout.write(f"\r  Countdown: {remaining}s remaining... ")
                 sys.stdout.flush()
-                time.sleep(1)
+                time.sleep(random.uniform(0.96, 1.06))
             print()
 
             comp_res = self._post("/api/Task/completeTask", {"task_id": task_id})
@@ -287,7 +288,10 @@ class AceApiBot:
                     self.stats["error"] = f"Tasks suspended by platform: {msg}"
                     break
 
-            time.sleep(2)
+            # Natural human delay before moving to next task (3.5s - 6.5s)
+            cooldown = random.uniform(3.5, 6.5)
+            logger.info(f"[API] Human delay: pausing {cooldown:.1f}s before next task...")
+            time.sleep(cooldown)
 
         logger.info(f"[API] Finished processing tasks.")
         self.fetch_user_info()

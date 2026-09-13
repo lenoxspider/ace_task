@@ -19,10 +19,14 @@
         <div class="brand-logo">⚡</div>
         <div class="brand-text">
           <h1>Ace775 Command Center</h1>
-          <p class="subtitle">Multi-Account Automation & Earnings Monitor</p>
+          <p class="subtitle">Multi-Account Automation & Auto-Scheduler</p>
         </div>
       </div>
       <div class="header-actions">
+        <div class="scheduler-pill" id="header-scheduler-badge" title="Smart Working Hours Auto-Scheduler">
+          <span class="sched-dot"></span>
+          <span id="header-scheduler-text">Scheduler: Active (09:00)</span>
+        </div>
         <button id="btn-settings" class="btn btn-secondary" onclick="openSettingsModal()">
           <span class="btn-icon">⚙️</span> Settings
         </button>
@@ -66,11 +70,28 @@
 
       <div class="stat-card">
         <div class="stat-header">
-          <span class="stat-title">Engine Status</span>
-          <span class="stat-icon">🟢</span>
+          <span class="stat-title">Telegram Bot</span>
+          <span class="stat-icon">📱</span>
         </div>
-        <div class="stat-value status-active" id="stat-system-status">Ready</div>
-        <div class="stat-footer">Fast API & Playwright</div>
+        <div class="stat-value status-active" id="stat-telegram-status">Connected</div>
+        <div class="stat-footer">Two-Way /status & /run</div>
+      </div>
+    </section>
+
+    <!-- Financial Analytics: 7-Day Earnings Trend -->
+    <section class="content-panel analytics-panel">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2>7-Day Earnings & Activity Trend</h2>
+          <span class="badge badge-mode">GHS Performance</span>
+        </div>
+        <div class="panel-tools">
+          <span class="trend-subtitle">Daily profit and completed task volume</span>
+        </div>
+      </div>
+      <div class="chart-container" id="chart-container">
+        <!-- Responsive SVG Chart Rendered Here -->
+        <div class="empty-placeholder">Loading 7-day analytics...</div>
       </div>
     </section>
 
@@ -175,18 +196,41 @@
     </div>
   </div>
 
-  <!-- Modal: Settings (Telegram, Base URL) -->
+  <!-- Modal: Settings (Scheduler, Telegram, Base URL) -->
   <div class="modal-overlay" id="settings-modal">
     <div class="modal-card">
       <div class="modal-header">
-        <h3>System Settings</h3>
+        <h3>System & Scheduler Settings</h3>
         <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
       </div>
       <form id="settings-form" onsubmit="handleSettingsSubmit(event)">
-        <div class="form-group">
-          <label for="set-base-url">Website Base URL</label>
-          <input type="text" id="set-base-url" value="https://ace775.com" required>
+        
+        <h4 class="settings-subhead">⏰ Working Hours Auto-Scheduler</h4>
+        
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="set-sched-time">Daily Scheduled Time</label>
+            <input type="time" id="set-sched-time" value="09:00" required>
+          </div>
+          <div class="form-group flex-1">
+            <label for="set-retry-mins">Retry Delay (Mins)</label>
+            <input type="number" id="set-retry-mins" value="30" min="5" max="180">
+          </div>
         </div>
+
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="set-sched-enabled" checked> Enable daily scheduled auto-run
+          </label>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="set-auto-retry" checked> Auto-retry when "Outside working hours"
+          </label>
+        </div>
+
+        <h4 class="settings-subhead" style="margin-top:16px;">📱 Two-Way Telegram Control</h4>
 
         <div class="form-group">
           <label for="set-tg-token">Telegram Bot Token</label>
@@ -195,9 +239,14 @@
         </div>
 
         <div class="form-group">
-          <label for="set-tg-chat">Telegram Chat ID</label>
+          <label for="set-tg-chat">Telegram Chat ID (Authorized)</label>
           <input type="text" id="set-tg-chat" placeholder="5511238401" autocomplete="off">
-          <span class="form-hint">Your numeric ID from @userinfobot.</span>
+          <span class="form-hint">Only messages from this ID are accepted.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="set-base-url">Website Base URL</label>
+          <input type="text" id="set-base-url" value="https://ace775.com" required>
         </div>
 
         <div class="modal-actions">

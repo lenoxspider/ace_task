@@ -1,5 +1,6 @@
 /**
  * Ace775 Web Dashboard Frontend Logic (Vanilla JS)
+ * Includes Smart Scheduler, Analytics Chart, and SSE Streaming
  */
 
 let accounts = [];
@@ -8,11 +9,17 @@ let eventSource = null;
 document.addEventListener("DOMContentLoaded", () => {
   loadStats();
   loadAccounts();
+  loadAnalytics();
+  loadSchedulerStatus();
   initLogStream();
   loadSettings();
 
-  // Periodic stats poll every 10 seconds
-  setInterval(loadStats, 10000);
+  // Periodic polling every 12 seconds
+  setInterval(() => {
+    loadStats();
+    loadSchedulerStatus();
+    loadAnalytics();
+  }, 12000);
 });
 
 // ==============================================================================
@@ -130,6 +137,64 @@ async function runAllAccounts() {
 }
 
 // ==============================================================================
+// Analytics Chart (7-Day Performance)
+// ==============================================================================
+async function loadAnalytics() {
+  const container = document.getElementById("chart-container");
+  try {
+    const res = await fetch("/api/analytics/7days");
+    if (!res.ok) return;
+    const days = await res.json();
+
+    if (!days || days.length === 0) {
+      container.innerHTML = `<div class="empty-placeholder">No analytics data recorded yet.</div>`;
+      return;
+    }
+
+    const maxEarned = Math.max(...days.map(d => d.earned), 10.0);
+
+    container.innerHTML = days.map(d => {
+      const heightPercent = Math.max(Math.round((d.earned / maxEarned) * 100), 4);
+      return `
+        <div class="chart-bar-group" title="${d.date}: ${d.earned} GHS (${d.tasks} tasks)">
+          <span class="chart-bar-val">${d.earned > 0 ? '+' + d.earned : '0'}</span>
+          <div class="chart-bar-wrapper">
+            <div class="chart-bar-fill" style="height: ${heightPercent}%"></div>
+          </div>
+          <span class="chart-bar-label">${d.label}</span>
+        </div>
+      `;
+    }).join("");
+
+  } catch (err) {
+    console.error("Analytics load error:", err);
+  }
+}
+
+// ==============================================================================
+// Scheduler Status
+// ==============================================================================
+async function loadSchedulerStatus() {
+  try {
+    const res = await fetch("/api/scheduler");
+    if (!res.ok) return;
+    const data = await res.json();
+    const pill = document.getElementById("header-scheduler-badge");
+    const text = document.getElementById("header-scheduler-text");
+
+    if (data.enabled) {
+      pill.classList.remove("disabled");
+      text.innerText = `Scheduler: ${data.status_text}`;
+    } else {
+      pill.classList.add("disabled");
+      text.innerText = "Scheduler: Disabled";
+    }
+  } catch (err) {
+    console.error("Scheduler status error:", err);
+  }
+}
+
+// ==============================================================================
 // Modals & Forms
 // ==============================================================================
 function openAccountModal(acc = null) {
@@ -233,6 +298,10 @@ async function loadSettings() {
     document.getElementById("set-base-url").value = data.base_url || "https://ace775.com";
     document.getElementById("set-tg-token").value = data.telegram_token || "";
     document.getElementById("set-tg-chat").value = data.telegram_chat_id || "";
+    document.getElementById("set-sched-time").value = data.schedule_time || "09:00";
+    document.getElementById("set-retry-mins").value = data.retry_interval_minutes || "30";
+    document.getElementById("set-sched-enabled").checked = data.schedule_enabled === "1";
+    document.getElementById("set-auto-retry").checked = data.auto_retry_outside_hours === "1";
   } catch (err) {
     console.error("Settings error:", err);
   }
@@ -243,7 +312,11 @@ async function handleSettingsSubmit(e) {
   const payload = {
     base_url: document.getElementById("set-base-url").value.trim(),
     telegram_token: document.getElementById("set-tg-token").value.trim(),
-    telegram_chat_id: document.getElementById("set-tg-chat").value.trim()
+    telegram_chat_id: document.getElementById("set-tg-chat").value.trim(),
+    schedule_time: document.getElementById("set-sched-time").value.trim(),
+    retry_interval_minutes: document.getElementById("set-retry-mins").value.trim(),
+    schedule_enabled: document.getElementById("set-sched-enabled").checked ? "1" : "0",
+    auto_retry_outside_hours: document.getElementById("set-auto-retry").checked ? "1" : "0"
   };
 
   try {
@@ -254,7 +327,8 @@ async function handleSettingsSubmit(e) {
     });
     if (!res.ok) throw new Error("Failed to save settings");
     closeSettingsModal();
-    appendTerminalLog("[SYSTEM] Settings updated successfully.", "success");
+    loadSchedulerStatus();
+    appendTerminalLog("[SYSTEM] Settings and Auto-Scheduler updated successfully.", "success");
   } catch (err) {
     alert("Error: " + err.message);
   }
@@ -272,18 +346,19 @@ function initLogStream() {
     if (event.data && !event.data.includes("ping")) {
       const line = event.data;
       let level = "info";
-      if (line.includes("[SUCCESS]") || line.includes("✅")) level = "success";
-      else if (line.includes("[WARNING]") || line.includes("⚠️")) level = "warning";
+      if (line.includes("[SUCCESS]") || line.includes("✅") || line.includes("🎉")) level = "success";
+      else if (line.includes("[WARNING]") || line.includes("⚠️") || line.includes("⏳")) level = "warning";
       else if (line.includes("[ERROR]") || line.includes("❌")) level = "error";
 
       appendTerminalLog(line, level);
       loadStats();
       loadAccounts();
+      loadAnalytics();
     }
   };
 
   eventSource.onerror = () => {
-    // Reconnect automatically handled by browser EventSource
+    // Reconnection is automatically handled by browser EventSource
   };
 }
 

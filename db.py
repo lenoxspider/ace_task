@@ -1,12 +1,12 @@
 """
 Database management module for Ace775 Multi-Account Bot.
-Stores accounts, settings, and run statistics in SQLite.
+Stores accounts, settings, run statistics, and 7-day analytics in SQLite.
 """
 
 import os
 import sqlite3
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -35,7 +35,7 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db():
-    """Create tables if they do not exist and seed default account if empty."""
+    """Create tables if they do not exist and seed default settings and accounts."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -64,6 +64,28 @@ def init_db():
             value TEXT
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS daily_records (
+            date TEXT PRIMARY KEY,
+            tasks_count INTEGER DEFAULT 0,
+            earned_ghs REAL DEFAULT 0.0
+        )
+    """)
+    conn.commit()
+
+    # Seed initial settings
+    defaults = {
+        "schedule_time": "09:00",
+        "schedule_enabled": "1",
+        "auto_retry_outside_hours": "1",
+        "retry_interval_minutes": "30",
+        "base_url": "https://ace775.com",
+        "telegram_token": os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
+        "telegram_chat_id": os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    }
+    for k, v in defaults.items():
+        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
     conn.commit()
 
     # Seed initial account from .env if table is empty
@@ -181,7 +203,51 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
         WHERE id = ?
     """, (vip_level, balance, last_status, now, tasks_done, earned, account_id))
     conn.commit()
+
+    if tasks_done > 0 or earned > 0:
+        record_daily_earnings(tasks_done, earned)
+
     conn.close()
+
+
+def record_daily_earnings(tasks_done: int, earned: float):
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO daily_records (date, tasks_count, earned_ghs)
+        VALUES (?, ?, ?)
+        ON CONFLICT(date) DO UPDATE SET
+            tasks_count = tasks_count + excluded.tasks_count,
+            earned_ghs = earned_ghs + excluded.earned_ghs
+    """, (today, tasks_done, earned))
+    conn.commit()
+    conn.close()
+
+
+def get_last_7_days_analytics() -> List[Dict[str, Any]]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Generate past 7 days list
+    today = datetime.now()
+    dates = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
+    
+    cursor.execute("SELECT date, tasks_count, earned_ghs FROM daily_records WHERE date >= ?", (dates[0],))
+    rows = {row["date"]: {"tasks": row["tasks_count"], "earned": row["earned_ghs"]} for row in cursor.fetchall()}
+    conn.close()
+
+    result = []
+    for d in dates:
+        entry = rows.get(d, {"tasks": 0, "earned": 0.0})
+        day_label = datetime.strptime(d, "%Y-%m-%d").strftime("%a (%d)")
+        result.append({
+            "date": d,
+            "label": day_label,
+            "tasks": entry["tasks"],
+            "earned": round(entry["earned"], 2)
+        })
+    return result
 
 
 def get_dashboard_stats() -> Dict[str, Any]:
@@ -220,5 +286,4 @@ def set_setting(key: str, value: str):
     conn.close()
 
 
-# Initialize database when module is imported
 init_db()

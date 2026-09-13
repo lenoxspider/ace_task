@@ -669,6 +669,118 @@ body {
   font-size: 0.9rem;
 }
 
+/* Scheduler Pill in Header */
+.scheduler-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #34d399;
+}
+
+.scheduler-pill.disabled {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--panel-border);
+  color: var(--text-dim);
+}
+
+.sched-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
+.scheduler-pill.disabled .sched-dot {
+  background-color: var(--text-dim);
+  box-shadow: none;
+}
+
+/* Analytics Panel & SVG Chart */
+.analytics-panel {
+  margin-bottom: 0;
+}
+
+.trend-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.chart-container {
+  padding: 24px 28px;
+  height: 220px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+
+.chart-bar-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  gap: 8px;
+  position: relative;
+}
+
+.chart-bar-wrapper {
+  width: 100%;
+  max-width: 48px;
+  height: 140px;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.chart-bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, var(--accent-cyan), var(--primary));
+  border-radius: 6px 6px 0 0;
+  transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
+}
+
+.chart-bar-fill:hover {
+  filter: brightness(1.2);
+}
+
+.chart-bar-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.chart-bar-val {
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+.settings-subhead {
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-cyan);
+  margin-bottom: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .main-content {
@@ -678,3 +790,4 @@ body {
     padding: 16px;
   }
 }
+
