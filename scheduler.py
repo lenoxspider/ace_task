@@ -21,7 +21,8 @@ class SmartScheduler:
         self.run_all_callback = run_all_callback
         self.running = False
         self.thread: Optional[threading.Thread] = None
-        self.last_scheduled_date: Optional[str] = None
+        self.last_scheduled_slot_1: Optional[str] = None
+        self.last_scheduled_slot_2: Optional[str] = None
         self.retry_at: Optional[datetime] = None
         self.last_run_result: str = "Idle"
 
@@ -31,6 +32,7 @@ class SmartScheduler:
             try:
                 enabled = db.get_setting("schedule_enabled", "1") == "1"
                 sched_time = db.get_setting("schedule_time", "09:00").strip()
+                sched_time_2 = db.get_setting("schedule_time_2", "").strip()
                 auto_retry = db.get_setting("auto_retry_outside_hours", "1") == "1"
                 retry_interval = int(db.get_setting("retry_interval_minutes", "30"))
 
@@ -38,15 +40,23 @@ class SmartScheduler:
                 now_time_str = now.strftime("%H:%M")
                 today_str = now.strftime("%Y-%m-%d")
 
-                # 1. Check for scheduled daily run
-                if enabled and now_time_str == sched_time and self.last_scheduled_date != today_str:
-                    logger.info(f"⏰ Auto-Scheduler: Triggering scheduled daily run at {now_time_str}...")
-                    self.last_scheduled_date = today_str
+                # 1. Check for scheduled daily run - Slot 1
+                if enabled and sched_time and now_time_str == sched_time and self.last_scheduled_slot_1 != today_str:
+                    logger.info(f"⏰ Auto-Scheduler: Triggering scheduled daily run (Slot 1) at {now_time_str}...")
+                    self.last_scheduled_slot_1 = today_str
                     self.retry_at = None
                     if self.run_all_callback:
                         threading.Thread(target=self._run_with_retry_watch, daemon=True).start()
 
-                # 2. Check for pending auto-retry
+                # 2. Check for scheduled daily run - Slot 2 (Optional)
+                elif enabled and sched_time_2 and now_time_str == sched_time_2 and self.last_scheduled_slot_2 != today_str:
+                    logger.info(f"⏰ Auto-Scheduler: Triggering scheduled daily run (Slot 2) at {now_time_str}...")
+                    self.last_scheduled_slot_2 = today_str
+                    self.retry_at = None
+                    if self.run_all_callback:
+                        threading.Thread(target=self._run_with_retry_watch, daemon=True).start()
+
+                # 3. Check for pending auto-retry
                 elif self.retry_at and now >= self.retry_at and auto_retry:
                     logger.info(f"⏰ Auto-Scheduler: Executing queued retry after 'Outside working hours'...")
                     self.retry_at = None
@@ -79,18 +89,22 @@ class SmartScheduler:
     def get_status(self) -> Dict[str, Any]:
         enabled = db.get_setting("schedule_enabled", "1") == "1"
         sched_time = db.get_setting("schedule_time", "09:00").strip()
+        sched_time_2 = db.get_setting("schedule_time_2", "").strip()
         retry_interval = int(db.get_setting("retry_interval_minutes", "30"))
 
         status_text = "Disabled"
         if enabled:
             if self.retry_at:
                 status_text = f"Retrying at {self.retry_at.strftime('%H:%M')}"
+            elif sched_time_2:
+                status_text = f"Active ({sched_time}, {sched_time_2})"
             else:
-                status_text = f"Active (Next: {sched_time})"
+                status_text = f"Active ({sched_time})"
 
         return {
             "enabled": enabled,
             "schedule_time": sched_time,
+            "schedule_time_2": sched_time_2,
             "retry_scheduled": bool(self.retry_at),
             "retry_at": self.retry_at.strftime("%H:%M:%S") if self.retry_at else None,
             "retry_interval_minutes": retry_interval,

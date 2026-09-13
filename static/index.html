@@ -21,12 +21,20 @@
           <h1>Ace775 Command Center</h1>
           <p class="subtitle">Multi-Account Automation & Auto-Scheduler</p>
         </div>
+        <button id="btn-mobile-menu" class="btn-hamburger" onclick="toggleMobileMenu()" aria-label="Toggle Navigation">
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+        </button>
       </div>
-      <div class="header-actions">
+      <div class="header-actions" id="header-actions">
         <div class="scheduler-pill" id="header-scheduler-badge" title="Smart Working Hours Auto-Scheduler">
           <span class="sched-dot"></span>
           <span id="header-scheduler-text">Scheduler: Active (09:00)</span>
         </div>
+        <button id="btn-theme-toggle" class="btn btn-ghost" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+          <span class="btn-icon" id="theme-icon">☀️</span> <span class="btn-text-theme">Theme</span>
+        </button>
         <button id="btn-settings" class="btn btn-secondary" onclick="openSettingsModal()">
           <span class="btn-icon">⚙️</span> Settings
         </button>
@@ -219,8 +227,12 @@
         
         <div class="form-row">
           <div class="form-group flex-1">
-            <label for="set-sched-time">Daily Scheduled Time</label>
+            <label for="set-sched-time">Daily Slot 1</label>
             <input type="time" id="set-sched-time" value="09:00" required>
+          </div>
+          <div class="form-group flex-1">
+            <label for="set-sched-time-2">Daily Slot 2 (Optional)</label>
+            <input type="time" id="set-sched-time-2" value="" placeholder="--:--">
           </div>
           <div class="form-group flex-1">
             <label for="set-retry-mins">Retry Delay (Mins)</label>

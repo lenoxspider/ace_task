@@ -1,6 +1,6 @@
 /**
  * Ace775 Web Dashboard Frontend Logic (Vanilla JS)
- * Includes Smart Scheduler, Analytics Chart, and SSE Streaming
+ * Includes Smart Scheduler, Analytics Chart, Live Running Badges, Lifetime Stats, and SSE Streaming
  */
 
 // Automatically redirect to /login on session expiry
@@ -15,31 +15,87 @@ window.fetch = async function(...args) {
 
 let accounts = [];
 let eventSource = null;
+let runningAccountIds = new Set();
 
 document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
   loadStats();
   loadAccounts();
   loadAnalytics();
   loadSchedulerStatus();
+  checkActiveRuns();
   initLogStream();
   loadSettings();
 
-  // Periodic polling every 12 seconds
+  // Periodic polling every 10 seconds
   setInterval(() => {
     loadStats();
     loadSchedulerStatus();
-    loadAnalytics();
-  }, 12000);
+    checkActiveRuns();
+  }, 10000);
 });
 
 // ==============================================================================
-// Accounts Management
+// Theme Management (Dark / Light Mode)
+// ==============================================================================
+function initTheme() {
+  const saved = localStorage.getItem("ace_theme") || "dark";
+  applyTheme(saved);
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.contains("light-mode");
+  const nextTheme = isLight ? "dark" : "light";
+  applyTheme(nextTheme);
+}
+
+function applyTheme(theme) {
+  const icon = document.getElementById("theme-icon");
+  if (theme === "light") {
+    document.body.classList.add("light-mode");
+    if (icon) icon.innerText = "🌙";
+    localStorage.setItem("ace_theme", "light");
+  } else {
+    document.body.classList.remove("light-mode");
+    if (icon) icon.innerText = "☀️";
+    localStorage.setItem("ace_theme", "dark");
+  }
+}
+
+// ==============================================================================
+// Mobile Navigation Toggle
+// ==============================================================================
+function toggleMobileMenu() {
+  const menu = document.getElementById("header-actions");
+  const btn = document.getElementById("btn-mobile-menu");
+  if (menu) menu.classList.toggle("mobile-open");
+  if (btn) btn.classList.toggle("active");
+}
+
+// Close mobile menu when clicking outside
+document.addEventListener("click", (e) => {
+  const menu = document.getElementById("header-actions");
+  const btn = document.getElementById("btn-mobile-menu");
+  if (menu && menu.classList.contains("mobile-open") && !menu.contains(e.target) && !btn.contains(e.target)) {
+    menu.classList.remove("mobile-open");
+    if (btn) btn.classList.remove("active");
+  }
+});
+
+// ==============================================================================
+// Accounts Management & Live Indicators (#4, #6)
 // ==============================================================================
 async function loadAccounts() {
   try {
     const res = await fetch("/api/accounts");
     if (!res.ok) throw new Error("Failed to load accounts");
     accounts = await res.json();
+    // Sync any that report Running...
+    accounts.forEach(a => {
+      if (a.last_status === "Running...") {
+        runningAccountIds.add(a.id);
+      }
+    });
     renderAccounts(accounts);
   } catch (err) {
     console.error(err);
@@ -61,16 +117,24 @@ function renderAccounts(list) {
   }
 
   container.innerHTML = list.map(acc => {
-    const isRunning = acc.last_status === "Running...";
+    const isRunning = runningAccountIds.has(acc.id) || acc.last_status === "Running...";
+    const earnedToday = Number(acc.earned_today || 0).toFixed(2);
+    const tasksToday = acc.tasks_done_today || 0;
+    const lifetimeEarned = Number(acc.total_earned_ghs || 0).toFixed(2);
+    const lifetimeTasks = acc.total_tasks_done || 0;
+
     return `
-      <div class="account-card ${acc.enabled ? '' : 'disabled'}" id="card-acc-${acc.id}">
+      <div class="account-card ${acc.enabled ? '' : 'disabled'} ${isRunning ? 'acc-running' : ''}" id="card-acc-${acc.id}">
         <div class="acc-info-primary">
-          <div class="acc-avatar">${acc.label ? acc.label.charAt(0).toUpperCase() : 'A'}</div>
+          <div class="acc-avatar ${isRunning ? 'pulse-avatar' : ''}">${acc.label ? acc.label.charAt(0).toUpperCase() : 'A'}</div>
           <div class="acc-details">
             <div class="acc-label-row">
               <span class="acc-label">${escapeHtml(acc.label || 'Account')}</span>
               <span class="badge badge-vip">${escapeHtml(acc.vip_level || 'VIP')}</span>
               <span class="badge badge-mode">${escapeHtml(acc.mode.toUpperCase())}</span>
+              <span class="badge badge-running-indicator" style="display: ${isRunning ? 'inline-flex' : 'none'};">
+                <span class="spinner-dot"></span> RUNNING NOW
+              </span>
             </div>
             <span class="acc-phone">+233 ${escapeHtml(acc.phone)}</span>
           </div>
@@ -79,19 +143,29 @@ function renderAccounts(list) {
         <div class="acc-stats-group">
           <div class="acc-stat-box">
             <span class="acc-stat-label">Balance</span>
-            <span class="acc-stat-val">${acc.balance || '0'} <small style="color:var(--accent-cyan)">GHS</small></span>
+            <span class="acc-stat-val">${acc.balance || '0'} <small class="currency-tag">GHS</small></span>
           </div>
           <div class="acc-stat-box">
-            <span class="acc-stat-label">Status</span>
-            <span class="acc-stat-val" style="font-size:0.8rem; color:${acc.last_status && acc.last_status.includes('Completed') ? 'var(--success)' : 'var(--text-muted)'}">
+            <span class="acc-stat-label">Today's Profit</span>
+            <span class="acc-stat-val text-success">+${earnedToday} <small class="currency-tag">GHS</small></span>
+            <span class="acc-stat-sub">${tasksToday} tasks</span>
+          </div>
+          <div class="acc-stat-box">
+            <span class="acc-stat-label">Lifetime Stats</span>
+            <span class="acc-stat-val text-cyan">+${lifetimeEarned} <small class="currency-tag">GHS</small></span>
+            <span class="acc-stat-sub">${lifetimeTasks} all-time</span>
+          </div>
+          <div class="acc-stat-box">
+            <span class="acc-stat-label">Last Status</span>
+            <span class="acc-stat-val acc-status-val" style="color:${getStatusColor(acc.last_status)}">
               ${escapeHtml(acc.last_status || 'Never run')}
             </span>
           </div>
         </div>
 
         <div class="acc-actions">
-          <button class="btn-run" onclick="runAccount(${acc.id})" ${isRunning ? 'disabled' : ''}>
-            ${isRunning ? '⏳ Running...' : '▶ Run'}
+          <button class="btn-run ${isRunning ? 'btn-running-active' : ''}" onclick="runAccount(${acc.id})" ${isRunning ? 'disabled' : ''}>
+            ${isRunning ? '<span class="spinner-dot"></span> Running...' : '▶ Run'}
           </button>
           <button class="btn-icon-action" title="Edit Account" onclick="editAccount(${acc.id})">✏️</button>
           <button class="btn-icon-action btn-delete" title="Delete Account" onclick="deleteAccount(${acc.id})">🗑️</button>
@@ -99,6 +173,71 @@ function renderAccounts(list) {
       </div>
     `;
   }).join("");
+}
+
+function getStatusColor(status) {
+  if (!status) return "var(--text-muted)";
+  if (status.includes("Completed") || status.includes("Verified")) return "var(--success)";
+  if (status.includes("Running")) return "var(--accent-cyan)";
+  if (status.includes("Failed") || status.includes("Error")) return "var(--danger)";
+  return "var(--text-muted)";
+}
+
+function updateRunningVisuals() {
+  accounts.forEach(acc => {
+    const card = document.getElementById(`card-acc-${acc.id}`);
+    if (!card) return;
+    const isRunning = runningAccountIds.has(acc.id);
+    const runBtn = card.querySelector(".btn-run");
+    const indicator = card.querySelector(".badge-running-indicator");
+    const avatar = card.querySelector(".acc-avatar");
+
+    if (isRunning) {
+      card.classList.add("acc-running");
+      if (runBtn) {
+        runBtn.disabled = true;
+        runBtn.classList.add("btn-running-active");
+        runBtn.innerHTML = `<span class="spinner-dot"></span> Running...`;
+      }
+      if (indicator) indicator.style.display = "inline-flex";
+      if (avatar) avatar.classList.add("pulse-avatar");
+    } else {
+      card.classList.remove("acc-running");
+      if (runBtn) {
+        runBtn.disabled = false;
+        runBtn.classList.remove("btn-running-active");
+        runBtn.innerHTML = `▶ Run`;
+      }
+      if (indicator) indicator.style.display = "none";
+      if (avatar) avatar.classList.remove("pulse-avatar");
+    }
+  });
+}
+
+async function checkActiveRuns() {
+  try {
+    const res = await fetch("/api/run/active");
+    if (!res.ok) return;
+    const data = await res.json();
+    const newRunning = new Set(data.running_ids || []);
+    runningAccountIds = newRunning;
+
+    const btnRunAll = document.getElementById("btn-run-all");
+    if (data.is_batch_running) {
+      if (btnRunAll) {
+        btnRunAll.disabled = true;
+        btnRunAll.innerHTML = `<span class="spinner-dot"></span> Batch Running...`;
+      }
+    } else {
+      if (btnRunAll) {
+        btnRunAll.disabled = false;
+        btnRunAll.innerHTML = `<span class="btn-icon">▶</span> Run All Active`;
+      }
+    }
+    updateRunningVisuals();
+  } catch (err) {
+    console.error("Active runs check error:", err);
+  }
 }
 
 function filterAccounts() {
@@ -374,8 +513,33 @@ async function loadStats() {
     document.getElementById("stat-active-subtitle").innerText = `${stats.active_accounts} active in rotation`;
     document.getElementById("stat-tasks-today").innerText = stats.tasks_completed_today;
     document.getElementById("stat-earned-today").innerHTML = `${stats.total_earned_today.toFixed(2)} <span class="currency">GHS</span>`;
+
+    // Lifetime Footers (#6)
+    const cards = document.querySelectorAll("#stats-section .stat-card");
+    if (cards.length >= 3) {
+      if (stats.lifetime_tasks !== undefined) {
+        cards[1].querySelector(".stat-footer").innerText = `Today • Lifetime: ${stats.lifetime_tasks} tasks`;
+      }
+      if (stats.lifetime_earned !== undefined) {
+        cards[2].querySelector(".stat-footer").innerText = `Today • Lifetime: ${stats.lifetime_earned.toFixed(2)} GHS`;
+      }
+    }
   } catch (err) {
     console.error("Stats load error:", err);
+  }
+}
+
+async function loadSchedulerStatus() {
+  try {
+    const res = await fetch("/api/scheduler");
+    if (!res.ok) return;
+    const data = await res.json();
+    const textEl = document.getElementById("header-scheduler-text");
+    if (textEl) {
+      textEl.innerText = "Scheduler: " + (data.status_text || (data.enabled ? "Active" : "Disabled"));
+    }
+  } catch (err) {
+    console.error("Scheduler status error:", err);
   }
 }
 
@@ -396,6 +560,7 @@ async function loadSettings() {
     document.getElementById("set-tg-token").value = data.telegram_token || "";
     document.getElementById("set-tg-chat").value = data.telegram_chat_id || "";
     document.getElementById("set-sched-time").value = data.schedule_time || "09:00";
+    document.getElementById("set-sched-time-2").value = data.schedule_time_2 || "";
     document.getElementById("set-retry-mins").value = data.retry_interval_minutes || "30";
     document.getElementById("set-sched-enabled").checked = data.schedule_enabled === "1";
     document.getElementById("set-auto-retry").checked = data.auto_retry_outside_hours === "1";
@@ -411,6 +576,7 @@ async function handleSettingsSubmit(e) {
     telegram_token: document.getElementById("set-tg-token").value.trim(),
     telegram_chat_id: document.getElementById("set-tg-chat").value.trim(),
     schedule_time: document.getElementById("set-sched-time").value.trim(),
+    schedule_time_2: document.getElementById("set-sched-time-2").value.trim(),
     retry_interval_minutes: document.getElementById("set-retry-mins").value.trim(),
     schedule_enabled: document.getElementById("set-sched-enabled").checked ? "1" : "0",
     auto_retry_outside_hours: document.getElementById("set-auto-retry").checked ? "1" : "0"
@@ -432,7 +598,7 @@ async function handleSettingsSubmit(e) {
 }
 
 // ==============================================================================
-// Terminal Console & SSE Log Streaming
+// Terminal Console & SSE Log Streaming (#4)
 // ==============================================================================
 function initLogStream() {
   if (eventSource) eventSource.close();
@@ -442,6 +608,27 @@ function initLogStream() {
   eventSource.onmessage = (event) => {
     if (event.data && !event.data.includes("ping")) {
       const line = event.data;
+
+      // Handle account live indicator signals
+      if (line.includes("[ACCOUNT_RUNNING:")) {
+        const match = line.match(/\[ACCOUNT_RUNNING:(\d+)\]/);
+        if (match) {
+          runningAccountIds.add(Number(match[1]));
+          updateRunningVisuals();
+        }
+        return;
+      }
+      if (line.includes("[ACCOUNT_IDLE:")) {
+        const match = line.match(/\[ACCOUNT_IDLE:(\d+)\]/);
+        if (match) {
+          runningAccountIds.delete(Number(match[1]));
+          updateRunningVisuals();
+          loadAccounts();
+          loadStats();
+        }
+        return;
+      }
+
       let level = "info";
       if (line.includes("[SUCCESS]") || line.includes("✅") || line.includes("🎉")) level = "success";
       else if (line.includes("[WARNING]") || line.includes("⚠️") || line.includes("⏳")) level = "warning";
@@ -449,8 +636,7 @@ function initLogStream() {
 
       appendTerminalLog(line, level);
       loadStats();
-      loadAccounts();
-      loadAnalytics();
+      loadSchedulerStatus();
     }
   };
 

@@ -107,6 +107,22 @@ class TelegramReporter:
         lines.extend(["", "✅ <i>Finished.</i>"])
         return self.send_message("\n".join(lines))
 
+    def send_error_alert(self, account_label: str, phone: str, error_msg: str) -> bool:
+        if not self.is_configured:
+            return False
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        label = account_label or phone
+        lines = [
+            "⚠️ <b>Ace775 Task Execution Failure Alert</b>",
+            f"📅 <i>{now}</i>",
+            "",
+            f"👤 <b>Account:</b> {label} (<code>{phone}</code>)",
+            f"❌ <b>Error:</b> <code>{error_msg}</code>",
+            "",
+            "ℹ️ <i>Please check your web dashboard or account credentials.</i>"
+        ]
+        return self.send_message("\n".join(lines))
+
 
 # ==============================================================================
 # Direct API Mode (Lightweight & Fast for Linux VPS / Local Testing)

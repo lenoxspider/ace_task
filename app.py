@@ -74,6 +74,7 @@ MAX_LOG_HISTORY = 300
 log_history: List[Dict[str, Any]] = []
 log_subscribers: List[asyncio.Queue] = []
 is_running_lock = False
+RUNNING_ACCOUNT_IDS: set = set()
 
 
 def broadcast_log(message: str, level: str = "info"):
@@ -112,8 +113,15 @@ def run_single_account(account_id: int):
     max_tasks = account.get("max_tasks", 0)
     base_url = db.get_setting("base_url", "https://ace775.com")
 
+    RUNNING_ACCOUNT_IDS.add(account_id)
+    broadcast_log(f"[ACCOUNT_RUNNING:{account_id}]", "event")
     broadcast_log(f"🚀 Starting run for '{label}' ({phone}) in {mode.upper()} mode...", "info")
     db.update_account_stats(account_id, last_status="Running...")
+
+    # Telegram reporter setup
+    tg_token = db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", ""))
+    tg_chat = db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", ""))
+    reporter = TelegramReporter(bot_token=tg_token, chat_id=tg_chat)
 
     stats: Dict[str, Any] = {}
     try:
@@ -131,6 +139,8 @@ def run_single_account(account_id: int):
         status_msg = "Completed"
         if stats.get("error"):
             status_msg = stats["error"]
+            if reporter.is_configured:
+                reporter.send_error_alert(label, phone, stats["error"])
 
         db.update_account_stats(
             account_id,
@@ -147,16 +157,19 @@ def run_single_account(account_id: int):
         )
 
         # Telegram report
-        tg_token = db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", ""))
-        tg_chat = db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", ""))
-        reporter = TelegramReporter(bot_token=tg_token, chat_id=tg_chat)
-        if reporter.is_configured:
+        if reporter.is_configured and not stats.get("error"):
             reporter.send_report(stats)
 
     except Exception as e:
+        err_str = str(e)
         logger.error(f"Error running account {phone}: {e}", exc_info=True)
-        broadcast_log(f"❌ Error on '{label}': {str(e)}", "error")
-        db.update_account_stats(account_id, last_status=f"Failed: {str(e)[:30]}")
+        broadcast_log(f"❌ Error on '{label}': {err_str}", "error")
+        db.update_account_stats(account_id, last_status=f"Failed: {err_str[:30]}")
+        if reporter.is_configured:
+            reporter.send_error_alert(label, phone, err_str)
+    finally:
+        RUNNING_ACCOUNT_IDS.discard(account_id)
+        broadcast_log(f"[ACCOUNT_IDLE:{account_id}]", "event")
 
 
 def run_all_enabled_accounts():
@@ -230,6 +243,7 @@ class SettingsUpdate(BaseModel):
     telegram_chat_id: Optional[str] = None
     base_url: Optional[str] = None
     schedule_time: Optional[str] = None
+    schedule_time_2: Optional[str] = None
     schedule_enabled: Optional[str] = None
     auto_retry_outside_hours: Optional[str] = None
     retry_interval_minutes: Optional[str] = None
@@ -482,6 +496,14 @@ async def stream_logs(request: Request):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
+@app.get("/api/run/active")
+def get_active_runs():
+    return {
+        "running_ids": list(RUNNING_ACCOUNT_IDS),
+        "is_batch_running": is_running_lock
+    }
+
+
 @app.get("/api/settings")
 def get_settings_api():
     return {
@@ -489,6 +511,7 @@ def get_settings_api():
         "telegram_chat_id": db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", "")),
         "base_url": db.get_setting("base_url", "https://ace775.com"),
         "schedule_time": db.get_setting("schedule_time", "09:00"),
+        "schedule_time_2": db.get_setting("schedule_time_2", ""),
         "schedule_enabled": db.get_setting("schedule_enabled", "1"),
         "auto_retry_outside_hours": db.get_setting("auto_retry_outside_hours", "1"),
         "retry_interval_minutes": db.get_setting("retry_interval_minutes", "30")
@@ -505,6 +528,8 @@ def update_settings_api(data: SettingsUpdate):
         db.set_setting("base_url", data.base_url.strip())
     if data.schedule_time is not None:
         db.set_setting("schedule_time", data.schedule_time.strip())
+    if data.schedule_time_2 is not None:
+        db.set_setting("schedule_time_2", data.schedule_time_2.strip())
     if data.schedule_enabled is not None:
         db.set_setting("schedule_enabled", data.schedule_enabled.strip())
     if data.auto_retry_outside_hours is not None:

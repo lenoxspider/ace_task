@@ -220,6 +220,10 @@
   </div>
 
   <script>
+    if (localStorage.getItem("ace_theme") === "light") {
+      document.body.classList.add("light-mode");
+    }
+
     function togglePasswordVisibility() {
       const input = document.getElementById("dash-password");
       const btn = document.getElementById("btn-toggle-pw");

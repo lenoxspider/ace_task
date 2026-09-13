@@ -54,9 +54,19 @@ def init_db():
             last_status TEXT DEFAULT 'Never run',
             tasks_done_today INTEGER DEFAULT 0,
             earned_today REAL DEFAULT 0.0,
+            total_tasks_done INTEGER DEFAULT 0,
+            total_earned_ghs REAL DEFAULT 0.0,
             created_at TEXT DEFAULT ''
         )
     """)
+
+    # Migration: ensure lifetime columns exist for existing databases
+    cursor.execute("PRAGMA table_info(accounts)")
+    columns = [col["name"] for col in cursor.fetchall()]
+    if "total_tasks_done" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN total_tasks_done INTEGER DEFAULT 0")
+    if "total_earned_ghs" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN total_earned_ghs REAL DEFAULT 0.0")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
@@ -77,6 +87,7 @@ def init_db():
     # Seed initial settings
     defaults = {
         "schedule_time": "09:00",
+        "schedule_time_2": "",
         "schedule_enabled": "1",
         "auto_retry_outside_hours": "1",
         "retry_interval_minutes": "30",
@@ -200,9 +211,11 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
             last_status = ?,
             last_run_time = ?,
             tasks_done_today = tasks_done_today + ?,
-            earned_today = earned_today + ?
+            earned_today = earned_today + ?,
+            total_tasks_done = total_tasks_done + ?,
+            total_earned_ghs = total_earned_ghs + ?
         WHERE id = ?
-    """, (vip_level, balance, last_status, now, tasks_done, earned, account_id))
+    """, (vip_level, balance, last_status, now, tasks_done, earned, tasks_done, earned, account_id))
     conn.commit()
 
     if tasks_done > 0 or earned > 0:
@@ -254,7 +267,16 @@ def get_last_7_days_analytics() -> List[Dict[str, Any]]:
 def get_dashboard_stats() -> Dict[str, Any]:
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) as total, SUM(enabled) as active, SUM(tasks_done_today) as tasks, SUM(earned_today) as earned FROM accounts")
+    cursor.execute("""
+        SELECT 
+            COUNT(*) as total, 
+            SUM(enabled) as active, 
+            SUM(tasks_done_today) as tasks, 
+            SUM(earned_today) as earned,
+            SUM(total_tasks_done) as lifetime_tasks,
+            SUM(total_earned_ghs) as lifetime_earned
+        FROM accounts
+    """)
     row = cursor.fetchone()
     conn.close()
 
@@ -262,11 +284,15 @@ def get_dashboard_stats() -> Dict[str, Any]:
     active = row["active"] or 0
     tasks = row["tasks"] or 0
     earned = row["earned"] or 0.0
+    lifetime_tasks = row["lifetime_tasks"] or 0
+    lifetime_earned = row["lifetime_earned"] or 0.0
     return {
         "total_accounts": total,
         "active_accounts": active,
         "tasks_completed_today": tasks,
-        "total_earned_today": round(earned, 2)
+        "total_earned_today": round(earned, 2),
+        "lifetime_tasks": lifetime_tasks,
+        "lifetime_earned": round(lifetime_earned, 2)
     }
 
 
