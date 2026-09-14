@@ -13,6 +13,7 @@
 <body>
 
   <div class="app-shell">
+  <div id="toast-container" class="toast-container"></div>
     
     <!-- Mobile Backdrop -->
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleMobileMenu()"></div>
@@ -62,6 +63,7 @@
           <button id="btn-theme-toggle" class="btn btn-xs btn-ghost" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
             <span id="theme-icon">☀️</span> Theme
           </button>
+          <button id="btn-high-contrast-toggle" class="btn btn-xs btn-ghost" title="Toggle High Contrast Mode">🔆</button>
           <button id="btn-logout" class="btn btn-xs btn-ghost" onclick="handleLogout()" title="Lock dashboard & log out">
             <span>🔒</span> Lock
           </button>
@@ -910,5 +912,7 @@
 
   <!-- Master ES Module Entry Point -->
   <script type="module" src="/static/js/dashboard.js"></script>
+<script defer src="/static/js/toasts.js"></script>
+<script defer src="/static/js/highcontrast.js"></script>
 </body>
 </html>

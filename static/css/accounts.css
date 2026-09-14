@@ -367,3 +367,15 @@
     justify-content: flex-end;
   }
 }
+
+/* Responsive fix for Overview page overlapping panels */
+@media (max-width: 1400px) {
+  .main-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Ensure adequate min-width for panels on larger screens */
+.main-content {
+  grid-template-columns: minmax(350px, 1.5fr) minmax(300px, 1fr);
+}

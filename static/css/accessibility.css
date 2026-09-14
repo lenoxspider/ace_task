@@ -1,0 +1,35 @@
+/* ===========================================================================
+   High Contrast Mode Overrides
+   =========================================================================== */
+
+/* Dark Theme High Contrast */
+[data-theme="dark"].high-contrast, .high-contrast[data-theme="dark"] {
+  --bg-main: #000000;
+  --bg-gradient: #000000;
+  --panel-bg: rgba(30, 30, 30, 0.9);
+  --panel-border: rgba(255, 255, 255, 0.2);
+  --text-main: #ffffff;
+  --text-muted: #dddddd;
+  --text-dim: #bbbbbb;
+  --accent-cyan: #00ffff;
+  --accent-purple: #ff00ff;
+  --success: #00ff00;
+  --warning: #ffff00;
+  --danger: #ff0000;
+}
+
+/* Light Theme High Contrast */
+[data-theme="light"].high-contrast, .high-contrast[data-theme="light"] {
+  --bg-main: #ffffff;
+  --bg-gradient: #ffffff;
+  --panel-bg: rgba(240, 240, 240, 0.95);
+  --panel-border: rgba(0, 0, 0, 0.2);
+  --text-main: #000000;
+  --text-muted: #333333;
+  --text-dim: #555555;
+  --accent-cyan: #0066ff;
+  --accent-purple: #8000ff;
+  --success: #008000;
+  --warning: #b8860b;
+  --danger: #800000;
+}
