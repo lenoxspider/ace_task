@@ -357,9 +357,9 @@
           <div style="display:flex; align-items:center; gap:12px;">
             <span style="font-size:1.6rem;">⏱️</span>
             <div>
-              <strong style="color:#ffffff;">Ace775 Platform Withdrawal Window: 09:00 – 17:00 Daily</strong>
+              <strong style="color:#ffffff;">Ace775 Platform Withdrawal Window: 09:00 – 17:00 (Monday – Friday)</strong>
               <p style="font-size:0.8rem; color:var(--text-muted);">
-                You can withdraw once per calendar day to your bound Mobile Money (MoMo) account. Auto-withdrawals run automatically after tasks complete when enabled. Ace775 only accepts fixed denominations.
+                You can withdraw once per calendar day to your bound Mobile Money (MoMo) account (Monday through Friday only; closed weekends). Auto-withdrawals run automatically after tasks complete when enabled. Ace775 only accepts fixed denominations.
               </p>
             </div>
           </div>
@@ -373,7 +373,7 @@
               <span class="badge" id="badge-queue-count" style="background:rgba(16,185,129,0.15); color:var(--accent-green); font-weight:600;">0 Pending</span>
             </div>
             <div class="panel-tools">
-              <span style="font-size:0.75rem; color:var(--text-muted); margin-right:8px;">Operating Window: <strong>09:00 - 17:00</strong> (Mon - Sat)</span>
+              <span style="font-size:0.75rem; color:var(--text-muted); margin-right:8px;">Operating Window: <strong>09:00 - 17:00</strong> (Mon - Fri)</span>
               <button class="btn btn-xs btn-secondary" onclick="loadWithdrawalQueue()" title="Refresh withdrawal queue">
                 <span class="btn-icon">🔄</span> Refresh Queue
               </button>
@@ -433,7 +433,7 @@
               <label class="checkbox-label">
                 <input type="checkbox" id="withdraw-page-auto-toggle"> Enable Automatic Daily Withdrawal
               </label>
-              <span class="form-hint">When enabled, the bot will auto-request a payout after tasks finish if operating hours (09:00 - 17:00) are open.</span>
+              <span class="form-hint">When enabled, the bot will auto-request a payout after tasks finish if operating hours (09:00 - 17:00, Mon - Fri) are open.</span>
             </div>
 
             <!-- Fixed Amount Options Selector (Dropdown + Quick Buttons) -->
@@ -578,7 +578,7 @@
               <div class="form-group flex-1">
                 <label for="set-max-spacing">Max Spacing Interval (Minutes)</label>
                 <input type="number" id="set-max-spacing" value="50" min="20" max="240" required>
-                <span class="form-hint">Maximum randomized interval. All requests are spaced and scheduled within 09:00–17:00.</span>
+                <span class="form-hint">Maximum randomized interval. All requests are spaced and scheduled within 09:00–17:00 (Mon–Fri).</span>
               </div>
             </div>
 

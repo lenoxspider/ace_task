@@ -371,6 +371,8 @@ def can_withdraw_today(account: Dict[str, Any], enforce_time_window: bool = True
     """
     now = datetime.now()
     if enforce_time_window:
+        if now.weekday() in (5, 6):
+            return False, "Withdrawals are only permitted Monday through Friday (Platform closed on weekends)."
         if now.hour < 9 or now.hour >= 17:
             return False, f"Withdrawals only permitted between 09:00 and 17:00 (Current: {now.strftime('%H:%M')})"
 
@@ -673,10 +675,10 @@ def calculate_next_withdrawal_slot(conn: Optional[sqlite3.Connection] = None) ->
         now = datetime.now()
 
         def push_to_next_valid_day(dt: datetime) -> datetime:
-            """Ensure date is Mon-Sat between 09:10 and 09:35."""
+            """Ensure date is Mon-Fri between 09:10 and 09:35."""
             next_day = dt + timedelta(days=1)
-            # If Sunday (weekday 6), skip to Monday
-            while next_day.weekday() == 6:
+            # If weekend (Saturday 5 or Sunday 6), skip forward to Monday
+            while next_day.weekday() in (5, 6):
                 next_day += timedelta(days=1)
             start_min = random.randint(10, 35)
             start_sec = random.randint(0, 59)
@@ -699,7 +701,7 @@ def calculate_next_withdrawal_slot(conn: Optional[sqlite3.Connection] = None) ->
                 start_min = random.randint(10, 30)
                 start_sec = random.randint(0, 59)
                 candidate = now.replace(hour=9, minute=start_min, second=start_sec, microsecond=0)
-                if candidate.weekday() == 6:
+                if candidate.weekday() in (5, 6):
                     candidate = push_to_next_valid_day(candidate - timedelta(days=1))
             elif now.hour >= 17 or (now.hour == 16 and now.minute >= 45):
                 candidate = push_to_next_valid_day(now)
@@ -708,8 +710,8 @@ def calculate_next_withdrawal_slot(conn: Optional[sqlite3.Connection] = None) ->
                 start_delay = random.randint(3, 10)
                 candidate = now + timedelta(minutes=start_delay, seconds=random.randint(0, 59))
 
-        # Check Sunday platform closure
-        if candidate.weekday() == 6:
+        # Check weekend platform closure for withdrawals (Saturday & Sunday)
+        if candidate.weekday() in (5, 6):
             candidate = push_to_next_valid_day(candidate)
 
         # Check operating hours window (09:00 - 17:00, with 16:45 cut-off)
@@ -793,9 +795,9 @@ def enqueue_withdrawal(account_id: int, phone: str, label: str, amount: float,
 
 
 def get_due_withdrawal() -> Optional[Dict[str, Any]]:
-    """Find the next withdrawal ready to execute (now >= scheduled_for, within 09:00-17:00, not Sunday)."""
+    """Find the next withdrawal ready to execute (now >= scheduled_for, within Mon-Fri 09:00-17:00)."""
     now = datetime.now()
-    if now.weekday() == 6:
+    if now.weekday() in (5, 6):
         return None
     if now.hour < 9 or now.hour >= 17:
         return None

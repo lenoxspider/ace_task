@@ -104,10 +104,10 @@ class SmartScheduler:
             self.retry_at = None
 
     def _check_withdrawal_queue(self):
-        """Processes any queued withdrawal that is due for execution within 09:00 - 17:00 (Mon-Sat)."""
+        """Processes any queued withdrawal that is due for execution within 09:00 - 17:00 (Mon-Fri)."""
         now = datetime.now()
-        # Ace775 operates strictly Mon-Sat between 09:00 and 17:00
-        if now.weekday() == 6:
+        # Ace775 operates withdrawals strictly Mon-Fri between 09:00 and 17:00
+        if now.weekday() in (5, 6):
             return
         if now.hour < 9 or now.hour >= 17:
             return

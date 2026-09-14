@@ -604,6 +604,10 @@ class AceApiBot:
         """
         now = datetime.now()
         if not bypass_time_window:
+            if now.weekday() in (5, 6):
+                err = "Withdrawal rejected: Platform closed on weekends (Withdrawals permitted Monday to Friday only)."
+                logger.warning(f"[API] {err}")
+                return {"success": False, "message": err}
             if now.hour < 9 or now.hour >= 17:
                 err = f"Withdrawal rejected: Outside operating hours (09:00 - 17:00). Current: {now.strftime('%H:%M')}"
                 logger.warning(f"[API] {err}")

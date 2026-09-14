@@ -284,7 +284,7 @@ def run_single_account(account_id: int, force: bool = False):
                         sched_time = q_res.get("scheduled_for", "")
                         broadcast_log(
                             f"📥 [Auto-Withdraw] Queued {target_withdraw:.2f} GHS for '{label}'! "
-                            f"Scheduled for {sched_time} (Randomized spacing strictly within 09:00-17:00).",
+                            f"Scheduled for {sched_time} (Randomized spacing strictly within 09:00-17:00 Mon-Fri).",
                             "success"
                         )
                         if reporter.is_configured:
@@ -984,7 +984,7 @@ def get_withdrawal_queue_api():
         "queue": db.get_withdrawal_queue(limit=50),
         "min_spacing": int(db.get_setting("min_withdrawal_spacing_minutes", "25") or "25"),
         "max_spacing": int(db.get_setting("max_withdrawal_spacing_minutes", "50") or "50"),
-        "window": "09:00 - 17:00 (Mon - Sat)"
+        "window": "09:00 - 17:00 (Mon - Fri)"
     }
 
 
