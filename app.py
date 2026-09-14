@@ -145,8 +145,11 @@ def run_single_account(account_id: int, force: bool = False):
     last_run = account.get("last_run_time") or ""
     status = (account.get("last_status") or "").lower()
     tasks_today = int(account.get("tasks_done_today") or 0)
-    if not force and last_run.startswith(today_str) and ("completed" in status or tasks_today >= 5):
-        broadcast_log(f"⏭️ Skipping '{label}' (+233 {phone}): All daily tasks are already completed today ({tasks_today} tasks done).", "info")
+    target_tasks = int(account.get("max_tasks") or 0)
+    target_tasks = target_tasks if target_tasks > 0 else 5  # Fallback to 5 if set to auto/0
+    
+    if not force and last_run.startswith(today_str) and ("completed" in status or tasks_today >= target_tasks):
+        broadcast_log(f"⏭️ Skipping '{label}' (+233 {phone}): All daily tasks are already completed today ({tasks_today}/{target_tasks} tasks done).", "info")
         return
 
     RUNNING_ACCOUNT_IDS.add(account_id)
@@ -363,7 +366,10 @@ def run_all_enabled_accounts():
             last_run = a.get("last_run_time") or ""
             status = (a.get("last_status") or "").lower()
             tasks_today = int(a.get("tasks_done_today") or 0)
-            if last_run.startswith(today_str) and ("completed" in status or tasks_today >= 5):
+            target_tasks = int(a.get("max_tasks") or 0)
+            target_tasks = target_tasks if target_tasks > 0 else 5
+            
+            if last_run.startswith(today_str) and ("completed" in status or tasks_today >= target_tasks):
                 already_completed.append(a)
             else:
                 pending_accounts.append(a)
