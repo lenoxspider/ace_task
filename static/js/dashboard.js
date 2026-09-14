@@ -127,6 +127,51 @@ window.loadWithdrawalsView = loadWithdrawalsView;
 window.loadWithdrawalQueue = loadWithdrawalQueue;
 window.cancelQueueItem = cancelQueueItem;
 
+// Desktop Collapsible Sidebar
+export function initSidebarCollapse() {
+  const isCollapsed = localStorage.getItem("ace_sidebar_collapsed") === "true";
+  const appShell = document.querySelector(".app-shell");
+  if (isCollapsed && appShell) {
+    appShell.classList.add("sidebar-collapsed");
+  }
+  updateSidebarCollapseButton(isCollapsed);
+
+  // Keyboard shortcut Ctrl+B or Cmd+B
+  window.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+      const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      e.preventDefault();
+      toggleSidebarCollapse();
+    }
+  });
+}
+
+export function toggleSidebarCollapse() {
+  const appShell = document.querySelector(".app-shell");
+  if (!appShell) return;
+  const isCollapsed = appShell.classList.toggle("sidebar-collapsed");
+  localStorage.setItem("ace_sidebar_collapsed", isCollapsed ? "true" : "false");
+  updateSidebarCollapseButton(isCollapsed);
+}
+
+function updateSidebarCollapseButton(isCollapsed) {
+  const btn = document.getElementById("btn-sidebar-collapse");
+  if (!btn) return;
+  const icon = btn.querySelector(".collapse-icon");
+  if (isCollapsed) {
+    btn.title = "Expand sidebar (Ctrl+B)";
+    btn.setAttribute("aria-label", "Expand sidebar");
+    if (icon) icon.textContent = "▶";
+  } else {
+    btn.title = "Collapse sidebar (Ctrl+B)";
+    btn.setAttribute("aria-label", "Collapse sidebar");
+    if (icon) icon.textContent = "◀";
+  }
+}
+
+window.toggleSidebarCollapse = toggleSidebarCollapse;
+
 // Mobile Sidebar Drawer
 window.toggleMobileMenu = function() {
   const sidebar = document.getElementById("sidebar");
@@ -164,6 +209,7 @@ async function checkActiveRuns() {
 // Bootstrap Application
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
+  initSidebarCollapse();
   initRouter();
   loadSchedulerStatus();
   loadStats();

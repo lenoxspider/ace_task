@@ -22,15 +22,26 @@
   bottom: 0;
   left: 0;
   z-index: 100;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow-x: hidden;
 }
 
 .sidebar-header {
-  padding: 22px 20px;
+  padding: 18px 16px;
   border-bottom: 1px solid var(--panel-border);
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 76px;
+}
+
+.sidebar-brand-wrapper {
+  display: flex;
+  align-items: center;
   gap: 12px;
+  overflow: hidden;
+  transition: opacity 0.2s ease, width 0.2s ease;
 }
 
 .sidebar-logo {
@@ -44,6 +55,7 @@
   justify-content: center;
   font-size: 1.25rem;
   box-shadow: 0 0 14px rgba(6, 182, 212, 0.3);
+  flex-shrink: 0;
 }
 
 .sidebar-brand h1 {
@@ -52,12 +64,44 @@
   color: #ffffff;
   letter-spacing: -0.02em;
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .sidebar-brand .subtitle {
   font-size: 0.72rem;
   color: var(--text-dim);
   font-weight: 500;
+  white-space: nowrap;
+}
+
+.btn-sidebar-collapse {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  transition: var(--transition-fast);
+  flex-shrink: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.btn-sidebar-collapse:hover {
+  background: rgba(34, 211, 238, 0.15);
+  border-color: rgba(34, 211, 238, 0.4);
+  color: #ffffff;
+}
+
+.collapse-icon {
+  display: inline-block;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  line-height: 1;
 }
 
 /* Nav Menu */
@@ -202,6 +246,7 @@
   flex-direction: column;
   gap: 24px;
   max-width: 1440px;
+  transition: margin-left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Mobile Header Bar */
@@ -260,6 +305,159 @@
   min-height: calc(100vh - 180px);
 }
 
+/* ==============================================================================
+   Sidebar Collapsed State (Desktop Icon Rail)
+   ============================================================================== */
+.app-shell.sidebar-collapsed .sidebar {
+  width: 68px;
+}
+
+.app-shell.sidebar-collapsed .main-content-area {
+  margin-left: 68px;
+}
+
+.app-shell.sidebar-collapsed .sidebar-header {
+  padding: 16px 8px;
+  flex-direction: column;
+  gap: 12px;
+  min-height: auto;
+}
+
+.app-shell.sidebar-collapsed .sidebar-brand {
+  display: none;
+}
+
+.app-shell.sidebar-collapsed .sidebar-brand-wrapper {
+  justify-content: center;
+  width: 100%;
+}
+
+.app-shell.sidebar-collapsed .btn-sidebar-collapse {
+  width: 26px;
+  height: 26px;
+}
+
+.app-shell.sidebar-collapsed .collapse-icon {
+  transform: rotate(180deg);
+}
+
+.app-shell.sidebar-collapsed .sidebar-nav {
+  padding: 14px 6px;
+  align-items: center;
+}
+
+.app-shell.sidebar-collapsed .nav-section-title {
+  height: 1px;
+  width: 32px;
+  padding: 0;
+  margin: 10px 0;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0;
+  text-indent: -9999px;
+  overflow: hidden;
+}
+
+.app-shell.sidebar-collapsed .nav-link {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  justify-content: center;
+  position: relative;
+}
+
+.app-shell.sidebar-collapsed .nav-label {
+  display: none;
+}
+
+.app-shell.sidebar-collapsed .nav-link .nav-icon {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+/* Badge pip in collapsed mode */
+.app-shell.sidebar-collapsed .nav-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 8px;
+  height: 8px;
+  padding: 0;
+  font-size: 0;
+  border-radius: 50%;
+  border: 1px solid var(--bg-elevated);
+}
+
+/* Pure CSS Floating Tooltips on Hover in Collapsed Mode */
+.app-shell.sidebar-collapsed .nav-link::after {
+  content: attr(data-title);
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.92);
+  background: #111827;
+  color: #f3f4f6;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+  z-index: 999;
+}
+
+.app-shell.sidebar-collapsed .nav-link:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) scale(1);
+}
+
+/* Footer in Collapsed Mode */
+.app-shell.sidebar-collapsed .sidebar-footer {
+  padding: 12px 6px;
+  align-items: center;
+}
+
+.app-shell.sidebar-collapsed .footer-label {
+  display: none;
+}
+
+.app-shell.sidebar-collapsed .scheduler-pill {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+
+.app-shell.sidebar-collapsed .theme-segmented-control {
+  flex-direction: column;
+  padding: 2px;
+  gap: 3px;
+  width: 38px;
+}
+
+.app-shell.sidebar-collapsed .theme-segment-btn {
+  padding: 6px 0;
+  justify-content: center;
+  width: 100%;
+}
+
+.app-shell.sidebar-collapsed .segment-label {
+  display: none;
+}
+
+.app-shell.sidebar-collapsed .btn-logout {
+  width: 38px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+}
+
 /* Responsive Drawer for Tablet & Mobile */
 @media (max-width: 960px) {
   .sidebar {
@@ -294,5 +492,61 @@
 
   .mobile-top-bar {
     display: flex;
+  }
+
+  /* Mobile reset for collapsed overrides */
+  .app-shell.sidebar-collapsed .sidebar {
+    width: 260px;
+  }
+
+  .app-shell.sidebar-collapsed .main-content-area {
+    margin-left: 0;
+  }
+
+  .app-shell.sidebar-collapsed .sidebar-header {
+    flex-direction: row;
+    padding: 18px 16px;
+  }
+
+  .app-shell.sidebar-collapsed .sidebar-brand {
+    display: block;
+  }
+
+  .app-shell.sidebar-collapsed .sidebar-brand-wrapper {
+    justify-content: flex-start;
+  }
+
+  .app-shell.sidebar-collapsed .nav-label,
+  .app-shell.sidebar-collapsed .segment-label,
+  .app-shell.sidebar-collapsed .footer-label {
+    display: inline;
+  }
+
+  .app-shell.sidebar-collapsed .nav-link {
+    width: 100%;
+    height: auto;
+    padding: 10px 14px;
+    justify-content: flex-start;
+  }
+
+  .app-shell.sidebar-collapsed .theme-segmented-control {
+    flex-direction: row;
+    width: 100%;
+  }
+
+  .app-shell.sidebar-collapsed .scheduler-pill {
+    width: 100%;
+    height: auto;
+    padding: 6px 12px;
+  }
+
+  .app-shell.sidebar-collapsed .btn-logout {
+    width: 100%;
+    height: auto;
+    padding: 6px 12px;
+  }
+
+  .app-shell.sidebar-collapsed .btn-sidebar-collapse {
+    display: none;
   }
 }

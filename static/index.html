@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/variables.css?v=3.1">
   <link rel="stylesheet" href="/static/css/base.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/sidebar.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/sidebar.css?v=3.2">
   <link rel="stylesheet" href="/static/css/header.css?v=3.1">
   <link rel="stylesheet" href="/static/css/stats.css?v=3.1">
   <link rel="stylesheet" href="/static/css/accounts.css?v=3.1">
@@ -32,61 +32,72 @@
     <!-- Navigation Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-logo">⚡</div>
-        <div class="sidebar-brand">
-          <h1>Ace775 Command</h1>
-          <p class="subtitle">Multi-Account Automation</p>
+        <div class="sidebar-brand-wrapper">
+          <div class="sidebar-logo" title="Ace775 Automation">⚡</div>
+          <div class="sidebar-brand">
+            <h1>Ace775 Command</h1>
+            <p class="subtitle">Multi-Account Automation</p>
+          </div>
         </div>
+        <button type="button" class="btn-sidebar-collapse" id="btn-sidebar-collapse" onclick="toggleSidebarCollapse()" title="Collapse sidebar (Ctrl+B)" aria-label="Toggle sidebar collapse">
+          <span class="collapse-icon">◀</span>
+        </button>
       </div>
 
       <nav class="sidebar-nav">
         <span class="nav-section-title">Core Management</span>
-        <a class="nav-link active" data-page="overview" onclick="navigate('overview')">
-          <span class="nav-icon">📊</span> Overview
+        <a class="nav-link active" data-page="overview" data-title="Overview" onclick="navigate('overview')">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">Overview</span>
         </a>
-        <a class="nav-link" data-page="accounts" onclick="navigate('accounts')">
-          <span class="nav-icon">👥</span> Accounts
+        <a class="nav-link" data-page="accounts" data-title="Accounts" onclick="navigate('accounts')">
+          <span class="nav-icon">👥</span>
+          <span class="nav-label">Accounts</span>
           <span class="nav-badge" id="badge-account-count">0</span>
         </a>
-        <a class="nav-link" data-page="terminal" onclick="navigate('terminal')">
-          <span class="nav-icon">💻</span> Live Terminal
+        <a class="nav-link" data-page="terminal" data-title="Live Terminal" onclick="navigate('terminal')">
+          <span class="nav-icon">💻</span>
+          <span class="nav-label">Live Terminal</span>
           <span class="sched-dot"></span>
         </a>
 
         <span class="nav-section-title" style="margin-top:12px;">Finance & Operations</span>
-        <a class="nav-link" data-page="withdrawals" onclick="navigate('withdrawals')">
-          <span class="nav-icon">💸</span> Withdrawals
+        <a class="nav-link" data-page="withdrawals" data-title="Withdrawals" onclick="navigate('withdrawals')">
+          <span class="nav-icon">💸</span>
+          <span class="nav-label">Withdrawals</span>
         </a>
-        <a class="nav-link" data-page="history" onclick="navigate('history')">
-          <span class="nav-icon">📜</span> Audit History
+        <a class="nav-link" data-page="history" data-title="Audit History" onclick="navigate('history')">
+          <span class="nav-icon">📜</span>
+          <span class="nav-label">Audit History</span>
         </a>
-        <a class="nav-link" data-page="settings" onclick="navigate('settings')">
-          <span class="nav-icon">⚙️</span> Settings
+        <a class="nav-link" data-page="settings" data-title="Settings" onclick="navigate('settings')">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">Settings</span>
         </a>
       </nav>
 
       <div class="sidebar-footer">
         <div class="scheduler-pill" id="header-scheduler-badge" title="Daily Pattern-Free Task Automation">
           <span class="sched-dot"></span>
-          <span id="header-scheduler-text">Scheduler: Active</span>
+          <span class="footer-label" id="header-scheduler-text">Scheduler: Active</span>
         </div>
 
         <!-- Segmented Theme & Contrast Control -->
         <div class="theme-segmented-control" role="group" aria-label="Theme & Contrast Mode">
           <button id="theme-btn-dark" class="theme-segment-btn active" onclick="setThemeMode('dark')" title="Dark Theme">
-            <span>🌙</span> Dark
+            <span>🌙</span> <span class="segment-label">Dark</span>
           </button>
           <button id="theme-btn-light" class="theme-segment-btn" onclick="setThemeMode('light')" title="Light Theme">
-            <span>☀️</span> Light
+            <span>☀️</span> <span class="segment-label">Light</span>
           </button>
           <button id="theme-btn-hc" class="theme-segment-btn" onclick="toggleHighContrast()" title="High Contrast Mode" aria-pressed="false">
-            <span>🔆</span> HC
+            <span>🔆</span> <span class="segment-label">HC</span>
           </button>
         </div>
 
         <div class="sidebar-actions-row">
-          <button id="btn-logout" class="btn btn-xs btn-ghost" style="width:100%; justify-content:center;" onclick="handleLogout()" title="Lock dashboard & log out">
-            <span>🔒</span> Lock Session
+          <button id="btn-logout" class="btn btn-xs btn-ghost btn-logout" style="width:100%; justify-content:center;" onclick="handleLogout()" title="Lock dashboard & log out">
+            <span>🔒</span> <span class="footer-label">Lock Session</span>
           </button>
         </div>
       </div>
@@ -1038,7 +1049,7 @@
   </div>
 
   <!-- Master ES Module Entry Point -->
-  <script type="module" src="/static/js/dashboard.js?v=3.1"></script>
+  <script type="module" src="/static/js/dashboard.js?v=3.2"></script>
   <script type="module" src="/static/js/toasts.js?v=3.1"></script>
 </body>
 </html>
