@@ -365,6 +365,40 @@
           </div>
         </div>
 
+        <!-- Live Withdrawal Queue Card (Anti-Clustering Pacing Engine) -->
+        <section class="content-panel" id="card-withdrawal-queue" style="border-left: 3px solid var(--accent-green);">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2>⏳ Live Withdrawal Queue</h2>
+              <span class="badge" id="badge-queue-count" style="background:rgba(16,185,129,0.15); color:var(--accent-green); font-weight:600;">0 Pending</span>
+            </div>
+            <div class="panel-tools">
+              <span style="font-size:0.75rem; color:var(--text-muted); margin-right:8px;">Operating Window: <strong>09:00 - 17:00</strong> (Mon - Sat)</span>
+              <button class="btn btn-xs btn-secondary" onclick="loadWithdrawalQueue()" title="Refresh withdrawal queue">
+                <span class="btn-icon">🔄</span> Refresh Queue
+              </button>
+            </div>
+          </div>
+          <div class="history-table-wrapper">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Queue #</th>
+                  <th>Account</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Scheduled Slot</th>
+                  <th>Execution Details</th>
+                  <th style="text-align:right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="withdrawal-queue-tbody">
+                <tr><td colspan="7" class="table-empty">No active withdrawals in queue.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- Dedicated Auto-Withdrawal Rule Configurator Card -->
         <section class="content-panel" id="card-auto-withdraw-setup" style="border-left: 3px solid var(--accent-cyan);">
           <div class="panel-header">
@@ -532,6 +566,20 @@
               <label class="checkbox-label">
                 <input type="checkbox" id="set-auto-retry" checked> Auto-retry when "Outside working hours"
               </label>
+            </div>
+
+            <h4 class="settings-subhead" style="margin-top:16px;">🛡️ Anti-Clustering Withdrawal Pacing Engine</h4>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="set-min-spacing">Min Spacing Interval (Minutes)</label>
+                <input type="number" id="set-min-spacing" value="25" min="15" max="120" required>
+                <span class="form-hint">Minimum separation between consecutive account requests (≥ 15 min anti-clustering guard).</span>
+              </div>
+              <div class="form-group flex-1">
+                <label for="set-max-spacing">Max Spacing Interval (Minutes)</label>
+                <input type="number" id="set-max-spacing" value="50" min="20" max="240" required>
+                <span class="form-hint">Maximum randomized interval. All requests are spaced and scheduled within 09:00–17:00.</span>
+              </div>
             </div>
 
             <h4 class="settings-subhead" style="margin-top:16px;">📱 Two-Way Telegram Control</h4>

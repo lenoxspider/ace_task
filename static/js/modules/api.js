@@ -155,6 +155,29 @@ export const api = {
     return data;
   },
 
+  getWithdrawalQueue: async () => {
+    const res = await request("/api/withdrawals/queue");
+    if (!res.ok) return { queue: [] };
+    return res.json();
+  },
+
+  cancelWithdrawalQueue: async (queueId) => {
+    const res = await request(`/api/withdrawals/queue/${queueId}/cancel`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Failed to cancel queued withdrawal");
+    return data;
+  },
+
+  enqueueWithdrawal: async (accountId, payload) => {
+    const res = await request(`/api/accounts/${accountId}/enqueue-withdrawal`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || data.message || "Failed to queue withdrawal");
+    return data;
+  },
+
   importCsv: async (csvContent) => {
     const res = await request("/api/accounts/import", {
       method: "POST",

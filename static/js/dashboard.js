@@ -47,6 +47,8 @@ import {
   closeHistoryModal,
   loadAuditHistoryTable,
   loadWithdrawalsView,
+  loadWithdrawalQueue,
+  cancelQueueItem,
   openImportModal,
   closeImportModal,
   handleCsvFileUpload,
@@ -118,6 +120,8 @@ window.loadSchedulerStatus = loadSchedulerStatus;
 window.loadSettings = loadSettings;
 window.loadAuditHistoryTable = loadAuditHistoryTable;
 window.loadWithdrawalsView = loadWithdrawalsView;
+window.loadWithdrawalQueue = loadWithdrawalQueue;
+window.cancelQueueItem = cancelQueueItem;
 
 // Mobile Sidebar Drawer
 window.toggleMobileMenu = function() {

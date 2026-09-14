@@ -17,8 +17,9 @@ logger = logging.getLogger("Scheduler")
 
 
 class SmartScheduler:
-    def __init__(self, run_all_callback: Optional[Callable] = None):
+    def __init__(self, run_all_callback: Optional[Callable] = None, broadcast_callback: Optional[Callable[[str, str], None]] = None):
         self.run_all_callback = run_all_callback
+        self.broadcast_callback = broadcast_callback
         self.running = False
         self.thread: Optional[threading.Thread] = None
         self.last_scheduled_slot_1: Optional[str] = None
@@ -71,6 +72,9 @@ class SmartScheduler:
                     if self.run_all_callback:
                         threading.Thread(target=self._run_with_retry_watch, daemon=True).start()
 
+                # 4. Anti-clustering Withdrawal Queue Worker (Strictly 09:00 - 17:00, Mon-Sat)
+                self._check_withdrawal_queue()
+
             except Exception as e:
                 logger.error(f"Scheduler loop error: {e}")
 
@@ -98,6 +102,126 @@ class SmartScheduler:
             logger.info(f"⏰ Outside working hours detected. Auto-retry scheduled at {retry_str} (in {retry_interval}m).")
         else:
             self.retry_at = None
+
+    def _check_withdrawal_queue(self):
+        """Processes any queued withdrawal that is due for execution within 09:00 - 17:00 (Mon-Sat)."""
+        now = datetime.now()
+        # Ace775 operates strictly Mon-Sat between 09:00 and 17:00
+        if now.weekday() == 6:
+            return
+        if now.hour < 9 or now.hour >= 17:
+            return
+
+        item = db.get_due_withdrawal()
+        if not item:
+            return
+
+        queue_id = item["id"]
+        account_id = item["account_id"]
+        amount = float(item["amount"])
+        wallet_flag = int(item.get("wallet_flag", 2))
+        pay_password = item.get("pay_password", "")
+        phone = item.get("phone", "")
+        label = item.get("label") or phone
+
+        # Mark item as processing immediately to prevent duplicate pickup
+        db.update_queue_item_status(queue_id, "processing")
+        if self.broadcast_callback:
+            self.broadcast_callback(
+                f"⚙️ [Withdrawal Queue] Slot reached! Executing queued withdrawal #{queue_id} for '{label}' ({amount:.2f} GHS)...",
+                "info"
+            )
+
+        try:
+            from ace_bot import AceApiBot, TelegramReporter
+
+            account = db.get_account(account_id, decrypt=True)
+            if not account:
+                msg = f"Account #{account_id} not found in database"
+                db.update_queue_item_status(queue_id, "failed", msg)
+                if self.broadcast_callback:
+                    self.broadcast_callback(f"❌ [Withdrawal Queue] {msg}", "error")
+                return
+
+            if account.get("enabled", 1) == 0:
+                msg = f"Account '{label}' is paused. Withdrawal aborted."
+                db.update_queue_item_status(queue_id, "failed", msg)
+                if self.broadcast_callback:
+                    self.broadcast_callback(f"⏸️ [Withdrawal Queue] {msg}", "warning")
+                return
+
+            # Check daily limit: max 1 completed withdrawal per day
+            today_str = now.strftime("%Y-%m-%d")
+            if account.get("last_withdraw_date") == today_str:
+                msg = f"Account '{label}' already completed a withdrawal today ({today_str}). Maximum 1 withdrawal per day allowed."
+                db.update_queue_item_status(queue_id, "failed", msg)
+                if self.broadcast_callback:
+                    self.broadcast_callback(f"⏸️ [Withdrawal Queue] {msg}", "warning")
+                return
+
+            pwd = account.get("password", "")
+            base_url = db.get_setting("base_url", "https://ace775.com")
+
+            bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
+            if not bot.login():
+                err_msg = bot.stats.get("error", "Login failed")
+                if err_msg.startswith("Login failed: "):
+                    err_msg = err_msg[14:]
+                db.update_queue_item_status(queue_id, "failed", f"Login failed: {err_msg}")
+                if self.broadcast_callback:
+                    self.broadcast_callback(f"❌ [Withdrawal Queue] Login failed for '{label}': {err_msg}", "error")
+                return
+
+            # Re-verify live wallet balance
+            inc_bal = float(bot.stats.get("income_balance") or 0.0)
+            pers_bal = float(bot.stats.get("personal_balance") or 0.0)
+            avail_bal = inc_bal if wallet_flag == 2 else pers_bal
+            if avail_bal <= 0:
+                avail_bal = float(bot.stats.get("balance") or 0.0)
+
+            wallet_name = "Income Wallet" if wallet_flag == 2 else "Personal Wallet"
+
+            if avail_bal < amount:
+                msg = f"Insufficient funds: {wallet_name} balance ({avail_bal:.2f} GHS) < requested {amount:.2f} GHS"
+                db.update_queue_item_status(queue_id, "failed", msg)
+                if self.broadcast_callback:
+                    self.broadcast_callback(f"❌ [Withdrawal Queue] '{label}': {msg}", "error")
+                return
+
+            tg_token = db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", ""))
+            tg_chat = db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", ""))
+            reporter = TelegramReporter(bot_token=tg_token, chat_id=tg_chat)
+
+            # Submit withdrawal via Ace775 API
+            res = bot.apply_withdrawal(amount=amount, pay_password=pay_password, withdrawl_flag=wallet_flag)
+            if res.get("success"):
+                success_msg = f"Submitted {amount:.2f} GHS"
+                db.update_queue_item_status(queue_id, "completed", success_msg)
+                db.update_account_withdrawal_status(account_id, status=success_msg)
+                db.update_account_stats(
+                    account_id,
+                    balance=bot.stats.get("balance"),
+                    income_balance=bot.stats.get("income_balance"),
+                    personal_balance=bot.stats.get("personal_balance")
+                )
+                if self.broadcast_callback:
+                    self.broadcast_callback(f"✅ [Withdrawal Queue] Success for '{label}': {success_msg}", "success")
+                if reporter.is_configured:
+                    reporter.send_withdrawal_alert(label, phone, amount, "Submitted Successfully (Queue)", res.get("message", ""))
+            else:
+                fail_msg = f"Failed: {res.get('message', 'API error')}"
+                db.update_queue_item_status(queue_id, "failed", fail_msg)
+                db.update_account_withdrawal_status(account_id, status=fail_msg)
+                if self.broadcast_callback:
+                    self.broadcast_callback(f"❌ [Withdrawal Queue] Failed for '{label}': {fail_msg}", "error")
+                if reporter.is_configured:
+                    reporter.send_withdrawal_alert(label, phone, amount, "Failed (Queue)", fail_msg)
+
+        except Exception as e:
+            logger.error(f"Error executing queued withdrawal #{queue_id}: {e}", exc_info=True)
+            db.update_queue_item_status(queue_id, "failed", f"Exception: {str(e)[:100]}")
+            if self.broadcast_callback:
+                self.broadcast_callback(f"❌ [Withdrawal Queue] Error processing #{queue_id} for '{label}': {e}", "error")
 
     def get_status(self) -> Dict[str, Any]:
         enabled = db.get_setting("schedule_enabled", "1") == "1"

@@ -7,6 +7,7 @@ import os
 import sqlite3
 import base64
 import hashlib
+import random
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -155,6 +156,23 @@ def init_db():
             earned_ghs REAL DEFAULT 0.0
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS withdrawal_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            phone TEXT NOT NULL,
+            label TEXT DEFAULT '',
+            amount REAL NOT NULL,
+            wallet_flag INTEGER DEFAULT 2,
+            pay_password TEXT DEFAULT '',
+            status TEXT DEFAULT 'queued',
+            queued_at TEXT NOT NULL,
+            scheduled_for TEXT NOT NULL,
+            executed_at TEXT DEFAULT '',
+            result_message TEXT DEFAULT ''
+        )
+    """)
     conn.commit()
 
     # Seed initial settings
@@ -164,6 +182,8 @@ def init_db():
         "schedule_enabled": "1",
         "auto_retry_outside_hours": "1",
         "retry_interval_minutes": "30",
+        "min_withdrawal_spacing_minutes": "25",
+        "max_withdrawal_spacing_minutes": "50",
         "base_url": "https://ace775.com",
         "telegram_token": os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
         "telegram_chat_id": os.getenv("TELEGRAM_CHAT_ID", "").strip(),
@@ -609,6 +629,255 @@ def get_dashboard_password() -> str:
 def verify_dashboard_password(candidate: str) -> bool:
     expected = get_dashboard_password()
     return bool(candidate and candidate.strip() == expected)
+
+
+# ==============================================================================
+# Intelligent Randomized Withdrawal Queue & Anti-Clustering Engine
+# ==============================================================================
+def calculate_next_withdrawal_slot(conn: Optional[sqlite3.Connection] = None) -> str:
+    """
+    Calculates the next available withdrawal slot ensuring:
+    1. Strictly within Ace775 operating window: 09:00 - 17:00 local time.
+    2. Monday - Saturday only (Sundays are skipped as platform rest days).
+    3. Randomized spacing between 25 and 50 minutes from the previous scheduled slot.
+    4. Random second-level jitter (0 to 59s).
+    """
+    close_conn = False
+    if conn is None:
+        conn = get_connection()
+        close_conn = True
+
+    try:
+        try:
+            min_spacing = int(get_setting("min_withdrawal_spacing_minutes", "25") or "25")
+        except (ValueError, TypeError):
+            min_spacing = 25
+
+        try:
+            max_spacing = int(get_setting("max_withdrawal_spacing_minutes", "50") or "50")
+        except (ValueError, TypeError):
+            max_spacing = 50
+
+        if min_spacing > max_spacing:
+            min_spacing, max_spacing = max_spacing, min_spacing
+
+        cursor = conn.cursor()
+        # Find the latest scheduled_for among all pending/processing items
+        cursor.execute("""
+            SELECT scheduled_for FROM withdrawal_queue
+            WHERE status IN ('queued', 'processing')
+            ORDER BY scheduled_for DESC
+            LIMIT 1
+        """)
+        last_row = cursor.fetchone()
+        now = datetime.now()
+
+        def push_to_next_valid_day(dt: datetime) -> datetime:
+            """Ensure date is Mon-Sat between 09:10 and 09:35."""
+            next_day = dt + timedelta(days=1)
+            # If Sunday (weekday 6), skip to Monday
+            while next_day.weekday() == 6:
+                next_day += timedelta(days=1)
+            start_min = random.randint(10, 35)
+            start_sec = random.randint(0, 59)
+            return next_day.replace(hour=9, minute=start_min, second=start_sec, microsecond=0)
+
+        if last_row and last_row[0]:
+            try:
+                last_dt = datetime.strptime(last_row[0], "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                last_dt = now
+
+            base_dt = max(now, last_dt)
+            # Add randomized spacing interval (e.g. 25 - 50 minutes) + jitter
+            step_mins = random.randint(min_spacing, max_spacing)
+            step_secs = random.randint(0, 59)
+            candidate = base_dt + timedelta(minutes=step_mins, seconds=step_secs)
+        else:
+            # First item in queue
+            if now.hour < 9:
+                start_min = random.randint(10, 30)
+                start_sec = random.randint(0, 59)
+                candidate = now.replace(hour=9, minute=start_min, second=start_sec, microsecond=0)
+                if candidate.weekday() == 6:
+                    candidate = push_to_next_valid_day(candidate - timedelta(days=1))
+            elif now.hour >= 17 or (now.hour == 16 and now.minute >= 45):
+                candidate = push_to_next_valid_day(now)
+            else:
+                # Within daytime window (09:00 - 16:45)
+                start_delay = random.randint(3, 10)
+                candidate = now + timedelta(minutes=start_delay, seconds=random.randint(0, 59))
+
+        # Check Sunday platform closure
+        if candidate.weekday() == 6:
+            candidate = push_to_next_valid_day(candidate)
+
+        # Check operating hours window (09:00 - 17:00, with 16:45 cut-off)
+        if candidate.hour < 9:
+            candidate = candidate.replace(hour=9, minute=random.randint(10, 30), second=random.randint(0, 59))
+        elif candidate.hour >= 17 or (candidate.hour == 16 and candidate.minute >= 45):
+            candidate = push_to_next_valid_day(candidate)
+
+        return candidate.strftime("%Y-%m-%d %H:%M:%S")
+
+    finally:
+        if close_conn:
+            conn.close()
+
+
+def enqueue_withdrawal(account_id: int, phone: str, label: str, amount: float,
+                       wallet_flag: int = 2, pay_password: str = "") -> Dict[str, Any]:
+    """
+    Places an auto-withdrawal request in the queue with randomized anti-clustering spacing.
+    Enforces 1 pending item per account and validates daily withdrawal limit.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+        # 1. Check if account already has an active queue item
+        cursor.execute("""
+            SELECT id, scheduled_for, status FROM withdrawal_queue
+            WHERE account_id = ? AND status IN ('queued', 'processing')
+            LIMIT 1
+        """, (account_id,))
+        existing = cursor.fetchone()
+        if existing:
+            return {
+                "queued": False,
+                "already_queued": True,
+                "queue_id": existing["id"],
+                "scheduled_for": existing["scheduled_for"],
+                "status": existing["status"],
+                "message": f"Account already has an active withdrawal in queue scheduled for {existing['scheduled_for']}."
+            }
+
+        # 2. Check if account already completed a withdrawal today
+        cursor.execute("SELECT last_withdraw_date FROM accounts WHERE id = ?", (account_id,))
+        acc_row = cursor.fetchone()
+        if acc_row and acc_row["last_withdraw_date"] == today_str:
+            return {
+                "queued": False,
+                "already_queued": False,
+                "message": f"Account already completed a withdrawal today ({today_str}). Maximum 1 withdrawal per day allowed."
+            }
+
+        # 3. Calculate next randomized slot strictly within 09:00 - 17:00
+        slot_time = calculate_next_withdrawal_slot(conn)
+        enc_pay_pwd = encrypt_password(pay_password) if pay_password else ""
+
+        cursor.execute("""
+            INSERT INTO withdrawal_queue (
+                account_id, phone, label, amount, wallet_flag, pay_password, status, queued_at, scheduled_for
+            ) VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)
+        """, (account_id, phone, label or phone, float(amount), int(wallet_flag), enc_pay_pwd, now_str, slot_time))
+        new_id = cursor.lastrowid
+        conn.commit()
+
+        # Update account withdrawal status note
+        time_display = slot_time[11:16] if len(slot_time) >= 16 else slot_time
+        update_account_withdrawal_status(account_id, status=f"Queued: {amount:.2f} GHS for {time_display}")
+
+        return {
+            "queued": True,
+            "already_queued": False,
+            "queue_id": new_id,
+            "amount": float(amount),
+            "scheduled_for": slot_time,
+            "message": f"Successfully queued {amount:.2f} GHS. Scheduled for {slot_time}."
+        }
+    finally:
+        conn.close()
+
+
+def get_due_withdrawal() -> Optional[Dict[str, Any]]:
+    """Find the next withdrawal ready to execute (now >= scheduled_for, within 09:00-17:00, not Sunday)."""
+    now = datetime.now()
+    if now.weekday() == 6:
+        return None
+    if now.hour < 9 or now.hour >= 17:
+        return None
+
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM withdrawal_queue
+        WHERE status = 'queued' AND scheduled_for <= ?
+        ORDER BY scheduled_for ASC
+        LIMIT 1
+    """, (now_str,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    d["pay_password"] = decrypt_password(d.get("pay_password", ""))
+    return d
+
+
+def cancel_queued_withdrawal(queue_id: int) -> bool:
+    """Allows cancelling a queued withdrawal before it executes."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT account_id FROM withdrawal_queue WHERE id = ? AND status = 'queued'", (queue_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return False
+
+    acc_id = row["account_id"]
+    cursor.execute("""
+        UPDATE withdrawal_queue
+        SET status = 'cancelled', result_message = 'Cancelled by operator'
+        WHERE id = ? AND status = 'queued'
+    """, (queue_id,))
+    ok = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+
+    if ok:
+        update_account_withdrawal_status(acc_id, status="Queue Cancelled")
+    return ok
+
+
+def update_queue_item_status(queue_id: int, status: str, result_message: str = ""):
+    """Update execution state of a withdrawal queue record."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("""
+        UPDATE withdrawal_queue
+        SET status = ?, result_message = ?, executed_at = ?
+        WHERE id = ?
+    """, (status, result_message, now_str if status in ('completed', 'failed') else '', queue_id))
+    conn.commit()
+    conn.close()
+
+
+def get_withdrawal_queue(limit: int = 50) -> List[Dict[str, Any]]:
+    """Returns withdrawal queue list for web dashboard with masked passwords."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM withdrawal_queue
+        ORDER BY
+            CASE status
+                WHEN 'processing' THEN 1
+                WHEN 'queued' THEN 2
+                ELSE 3
+            END,
+            scheduled_for ASC,
+            id DESC
+        LIMIT ?
+    """, (limit,))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    for r in rows:
+        r["pay_password"] = "••••••" if r.get("pay_password") else ""
+    return rows
 
 
 init_db()

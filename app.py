@@ -267,31 +267,41 @@ def run_single_account(account_id: int, force: bool = False):
                     "info"
                 )
             else:
-                # 2. Balance target has been reached! Now verify operational constraints
-                can_w, reason = db.can_withdraw_today(updated_account)
+                # 2. Balance target reached! Enqueue into intelligent anti-clustering withdrawal queue
                 if not pay_pwd:
                     db.update_account_withdrawal_status(account_id, status="Missing Payment PIN", withdraw_date=updated_account.get("last_withdraw_date", ""))
                     broadcast_log(f"⚠️ [Auto-Withdraw] Balance reached target ({available_bal:.2f} GHS >= {target_withdraw:.2f} GHS) for '{label}', but skipped: Transaction PIN/password not configured in account settings.", "warning")
-                elif not can_w:
-                    status_note = f"Ready: {target_withdraw:.2f} GHS (Held: {reason})"
-                    db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
-                    broadcast_log(f"⏸️ [Auto-Withdraw] Target reached ({available_bal:.2f} GHS >= {target_withdraw:.2f} GHS) for '{label}', but held: {reason}", "info")
                 else:
-                    broadcast_log(f"💸 [Auto-Withdraw] {wallet_name} reached target ({available_bal:.2f} GHS >= {target_withdraw:.2f} GHS). Submitting withdrawal of {target_withdraw:.2f} GHS for '{label}'...", "info")
-                    w_bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
-                    w_res = w_bot.apply_withdrawal(amount=target_withdraw, pay_password=pay_pwd, withdrawl_flag=w_flag)
-                    if w_res.get("success"):
-                        w_msg = f"Submitted {target_withdraw:.2f} GHS"
-                        db.update_account_withdrawal_status(account_id, status=w_msg)
-                        broadcast_log(f"✅ [Auto-Withdraw] Success for '{label}': {w_msg}", "success")
+                    q_res = db.enqueue_withdrawal(
+                        account_id=account_id,
+                        phone=phone,
+                        label=label,
+                        amount=target_withdraw,
+                        wallet_flag=w_flag,
+                        pay_password=pay_pwd
+                    )
+                    if q_res.get("queued"):
+                        sched_time = q_res.get("scheduled_for", "")
+                        broadcast_log(
+                            f"📥 [Auto-Withdraw] Queued {target_withdraw:.2f} GHS for '{label}'! "
+                            f"Scheduled for {sched_time} (Randomized spacing strictly within 09:00-17:00).",
+                            "success"
+                        )
                         if reporter.is_configured:
-                            reporter.send_withdrawal_alert(label, phone, target_withdraw, "Submitted Successfully", w_res.get("message", ""))
+                            reporter.send_withdrawal_alert(
+                                label, phone, target_withdraw, "Queued (Anti-Clustering Spacing)",
+                                f"Scheduled execution at {sched_time}."
+                            )
+                    elif q_res.get("already_queued"):
+                        broadcast_log(
+                            f"ℹ️ [Auto-Withdraw] '{label}' already has an active withdrawal in queue scheduled for {q_res.get('scheduled_for')}.",
+                            "info"
+                        )
                     else:
-                        fail_msg = f"Failed: {w_res.get('message', 'Unknown error')}"
-                        db.update_account_withdrawal_status(account_id, status=fail_msg)
-                        broadcast_log(f"❌ [Auto-Withdraw] Failed for '{label}': {fail_msg}", "error")
-                        if reporter.is_configured:
-                            reporter.send_withdrawal_alert(label, phone, target_withdraw, "Failed", fail_msg)
+                        broadcast_log(
+                            f"⏸️ [Auto-Withdraw] '{label}': {q_res.get('message', 'Cannot queue withdrawal.')}",
+                            "info"
+                        )
 
     except Exception as e:
         logger.error(f"Error running account {account_id}: {e}", exc_info=True)
@@ -360,6 +370,7 @@ def run_all_enabled_accounts():
 
 # Connect callbacks to Scheduler and Telegram Listener
 scheduler.run_all_callback = run_all_enabled_accounts
+scheduler.broadcast_callback = broadcast_log
 telegram_bot.run_all_callback = run_all_enabled_accounts
 
 
@@ -421,6 +432,8 @@ class SettingsUpdate(BaseModel):
     schedule_enabled: Optional[str] = None
     auto_retry_outside_hours: Optional[str] = None
     retry_interval_minutes: Optional[str] = None
+    min_withdrawal_spacing_minutes: Optional[str] = None
+    max_withdrawal_spacing_minutes: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -842,6 +855,7 @@ def get_account_withdrawal_options_api(account_id: int, refresh: bool = False):
     }
 
 
+@app.post("/api/accounts/{account_id}/withdraw")
 @app.post("/api/accounts/{account_id}/withdraw-now")
 def withdraw_account_now_api(account_id: int, item: Optional[WithdrawRequest] = None):
     account = db.get_account(account_id, decrypt=True)
@@ -922,6 +936,65 @@ def withdraw_account_now_api(account_id: int, item: Optional[WithdrawRequest] = 
         if reporter.is_configured:
             reporter.send_withdrawal_alert(label, phone, amount, "Failed", fail_msg)
         raise HTTPException(status_code=400, detail=res.get("message", "Withdrawal application failed"))
+
+
+@app.post("/api/accounts/{account_id}/enqueue-withdrawal")
+def enqueue_account_withdrawal_api(account_id: int, item: Optional[WithdrawRequest] = None):
+    account = db.get_account(account_id, decrypt=True)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    pay_pwd = (item.pay_password if item and item.pay_password else None) or account.get("pay_password")
+    if not pay_pwd:
+        raise HTTPException(status_code=400, detail="Transaction PIN/password is required. Please set it in Account settings.")
+
+    w_flag = (item.withdraw_wallet if item and item.withdraw_wallet is not None else None) or account.get("withdraw_wallet", 2)
+    amount = (item.amount if item and item.amount and item.amount > 0 else None) or float(account.get("withdraw_amount") or 0.0)
+
+    # Determine default minimum denomination if amount <= 0
+    raw_denominations = account.get("withdrawal_amounts") or [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
+    min_amount = min([float(x) for x in raw_denominations]) if raw_denominations else 65.0
+    if amount < min_amount:
+        amount = min_amount
+
+    phone = account["phone"]
+    label = account.get("label") or phone
+
+    res = db.enqueue_withdrawal(
+        account_id=account_id,
+        phone=phone,
+        label=label,
+        amount=amount,
+        wallet_flag=w_flag,
+        pay_password=pay_pwd
+    )
+    if not res.get("queued"):
+        raise HTTPException(status_code=400, detail=res.get("message", "Could not queue withdrawal."))
+
+    broadcast_log(
+        f"📥 [Withdrawal Queue] '{label}' manually queued for {amount:.2f} GHS! Scheduled for {res.get('scheduled_for')} (Randomized spacing within 09:00-17:00).",
+        "info"
+    )
+    return res
+
+
+@app.get("/api/withdrawals/queue")
+def get_withdrawal_queue_api():
+    return {
+        "queue": db.get_withdrawal_queue(limit=50),
+        "min_spacing": int(db.get_setting("min_withdrawal_spacing_minutes", "25") or "25"),
+        "max_spacing": int(db.get_setting("max_withdrawal_spacing_minutes", "50") or "50"),
+        "window": "09:00 - 17:00 (Mon - Sat)"
+    }
+
+
+@app.post("/api/withdrawals/queue/{queue_id}/cancel")
+def cancel_withdrawal_queue_api(queue_id: int):
+    ok = db.cancel_queued_withdrawal(queue_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Could not cancel queued item (it may have already been executed or does not exist).")
+    broadcast_log(f"🚫 Withdrawal Queue item #{queue_id} was cancelled by operator.", "warning")
+    return {"status": "cancelled", "queue_id": queue_id}
 
 
 @app.post("/api/accounts/import-csv")
@@ -1129,7 +1202,9 @@ def get_settings_api():
         "schedule_time_2": db.get_setting("schedule_time_2", ""),
         "schedule_enabled": db.get_setting("schedule_enabled", "1"),
         "auto_retry_outside_hours": db.get_setting("auto_retry_outside_hours", "1"),
-        "retry_interval_minutes": db.get_setting("retry_interval_minutes", "30")
+        "retry_interval_minutes": db.get_setting("retry_interval_minutes", "30"),
+        "min_withdrawal_spacing_minutes": db.get_setting("min_withdrawal_spacing_minutes", "25"),
+        "max_withdrawal_spacing_minutes": db.get_setting("max_withdrawal_spacing_minutes", "50")
     }
 
 
@@ -1151,6 +1226,10 @@ def update_settings_api(data: SettingsUpdate):
         db.set_setting("auto_retry_outside_hours", data.auto_retry_outside_hours.strip())
     if data.retry_interval_minutes is not None:
         db.set_setting("retry_interval_minutes", data.retry_interval_minutes.strip())
+    if data.min_withdrawal_spacing_minutes is not None:
+        db.set_setting("min_withdrawal_spacing_minutes", data.min_withdrawal_spacing_minutes.strip())
+    if data.max_withdrawal_spacing_minutes is not None:
+        db.set_setting("max_withdrawal_spacing_minutes", data.max_withdrawal_spacing_minutes.strip())
 
     # Dynamically reload Telegram Listener (#3)
     if data.telegram_token is not None or data.telegram_chat_id is not None:

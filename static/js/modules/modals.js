@@ -495,6 +495,7 @@ export async function loadAuditHistoryTable(accountId = null) {
 
 export function loadWithdrawalsView() {
   const accs = state.accounts || [];
+  loadWithdrawalQueue();
 
   // Populate account dropdown in Auto-Withdrawal Configurator Card
   const accSelect = document.getElementById("withdraw-page-acc-select");
@@ -560,6 +561,90 @@ export function loadWithdrawalsView() {
       </tr>
       `;
     }).join("");
+  }
+}
+
+export async function loadWithdrawalQueue() {
+  const tbody = document.getElementById("withdrawal-queue-tbody");
+  const badge = document.getElementById("badge-queue-count");
+  if (!tbody) return;
+
+  try {
+    const data = await api.getWithdrawalQueue();
+    const queue = (data && data.queue) || [];
+    const pendingCount = queue.filter(q => q.status === 'queued' || q.status === 'processing').length;
+    if (badge) {
+      badge.textContent = `${pendingCount} Pending`;
+      badge.style.background = pendingCount > 0 ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.06)";
+      badge.style.color = pendingCount > 0 ? "var(--accent-green)" : "var(--text-muted)";
+    }
+
+    if (queue.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="table-empty">No active or pending withdrawals in queue.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = queue.map(item => {
+      const isQueued = item.status === 'queued';
+      const isProcessing = item.status === 'processing';
+      const isCompleted = item.status === 'completed';
+      const isFailed = item.status === 'failed';
+
+      let statusBadge = '';
+      if (isQueued) {
+        statusBadge = `<span class="badge" style="background:rgba(245,158,11,0.15); color:var(--accent-gold);">⏳ QUEUED</span>`;
+      } else if (isProcessing) {
+        statusBadge = `<span class="badge" style="background:rgba(59,130,246,0.15); color:var(--accent-blue);">⚙️ PROCESSING</span>`;
+      } else if (isCompleted) {
+        statusBadge = `<span class="badge" style="background:rgba(16,185,129,0.15); color:var(--accent-green);">✅ COMPLETED</span>`;
+      } else {
+        statusBadge = `<span class="badge" style="background:rgba(239,68,68,0.15); color:var(--danger);">${escapeHtml((item.status || 'FAILED').toUpperCase())}</span>`;
+      }
+
+      return `
+        <tr>
+          <td style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-dim);">#${item.id}</td>
+          <td>
+            <strong>${escapeHtml(item.label || item.phone)}</strong>
+            <br><small style="color:var(--text-dim)">+233 ${escapeHtml(item.phone)}</small>
+          </td>
+          <td>
+            <strong style="color:var(--accent-cyan); font-family:var(--font-mono);">${Number(item.amount).toFixed(2)} GHS</strong>
+            <br><small style="color:var(--text-dim); font-size:0.75rem;">${item.wallet_flag === 1 ? 'Personal Wallet' : 'Income Wallet'}</small>
+          </td>
+          <td>${statusBadge}</td>
+          <td>
+            <strong style="font-family:var(--font-mono); font-size:0.85rem; color:${isQueued ? 'var(--accent-gold)' : 'var(--text-main)'};">
+              ${escapeHtml(item.scheduled_for || 'Now')}
+            </strong>
+            <br><small style="color:var(--text-dim); font-size:0.75rem;">Queued: ${escapeHtml(item.queued_at ? item.queued_at.split(' ')[1] || item.queued_at : '')}</small>
+          </td>
+          <td style="font-size:0.8rem; color:${isCompleted ? 'var(--accent-green)' : (isFailed ? 'var(--danger)' : 'var(--text-muted)')};">
+            ${escapeHtml(item.result_message || (isQueued ? 'Scheduled (Anti-clustering spacing)' : 'Waiting...'))}
+          </td>
+          <td style="text-align:right;">
+            ${isQueued ? `
+              <button class="btn btn-xs btn-danger" onclick="cancelQueueItem(${item.id})" title="Cancel this queued withdrawal">
+                ✕ Cancel
+              </button>
+            ` : `<span style="color:var(--text-dim); font-size:0.75rem;">—</span>`}
+          </td>
+        </tr>
+      `;
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty" style="color:var(--danger)">Error loading queue: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+export async function cancelQueueItem(queueId) {
+  if (!confirm(`Are you sure you want to cancel queued withdrawal #${queueId}?`)) return;
+  try {
+    await api.cancelWithdrawalQueue(queueId);
+    await loadWithdrawalQueue();
+    if (state.accounts) loadWithdrawalsView();
+  } catch (err) {
+    alert("Cancellation failed: " + err.message);
   }
 }
 
@@ -802,6 +887,10 @@ export async function loadSettings() {
     document.getElementById("set-retry-mins").value = data.retry_interval_minutes || "30";
     document.getElementById("set-sched-enabled").checked = data.schedule_enabled === "1";
     document.getElementById("set-auto-retry").checked = data.auto_retry_outside_hours === "1";
+    const minSpacing = document.getElementById("set-min-spacing");
+    if (minSpacing) minSpacing.value = data.min_withdrawal_spacing_minutes || "25";
+    const maxSpacing = document.getElementById("set-max-spacing");
+    if (maxSpacing) maxSpacing.value = data.max_withdrawal_spacing_minutes || "50";
   } catch (err) {
     console.error("Failed to load settings:", err);
   }
@@ -809,6 +898,9 @@ export async function loadSettings() {
 
 export async function handleSettingsSubmit(e) {
   e.preventDefault();
+  const minSpacing = document.getElementById("set-min-spacing");
+  const maxSpacing = document.getElementById("set-max-spacing");
+
   const payload = {
     base_url: document.getElementById("set-base-url").value.trim(),
     telegram_token: document.getElementById("set-tg-token").value.trim(),
@@ -817,7 +909,9 @@ export async function handleSettingsSubmit(e) {
     schedule_time_2: document.getElementById("set-sched-time-2").value.trim(),
     retry_interval_minutes: document.getElementById("set-retry-mins").value.trim(),
     schedule_enabled: document.getElementById("set-sched-enabled").checked ? "1" : "0",
-    auto_retry_outside_hours: document.getElementById("set-auto-retry").checked ? "1" : "0"
+    auto_retry_outside_hours: document.getElementById("set-auto-retry").checked ? "1" : "0",
+    min_withdrawal_spacing_minutes: minSpacing ? minSpacing.value.trim() : "25",
+    max_withdrawal_spacing_minutes: maxSpacing ? maxSpacing.value.trim() : "50"
   };
 
   try {
