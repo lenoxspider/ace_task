@@ -160,9 +160,13 @@ class SmartScheduler:
             tasks_done = int(a.get("tasks_done_today") or 0)
             status = (a.get("last_status") or "").lower()
             target_tasks = int(a.get("max_tasks") or 0)
-            target_tasks = target_tasks if target_tasks > 0 else 5
             
-            if last_run.startswith(today_str) and ("completed" in status or tasks_done >= target_tasks):
+            if target_tasks > 0:
+                is_done = ("completed" in status or tasks_done >= target_tasks)
+            else:
+                is_done = ("completed" in status)
+            
+            if last_run.startswith(today_str) and is_done:
                 continue
             pending_accounts.append(a)
 
