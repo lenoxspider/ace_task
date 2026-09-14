@@ -80,18 +80,35 @@ export function toggleAutoWithdrawFields() {
   const fields = document.getElementById("auto-withdraw-fields");
   const statusDesc = document.getElementById("auto-withdraw-status-desc");
 
+  if (cardGroup) {
+    if (checked) {
+      cardGroup.classList.add("is-active-config");
+    } else {
+      cardGroup.classList.remove("is-active-config");
+    }
+  }
+
   if (fields) {
-    fields.style.opacity = checked ? "1" : "0.45";
-    fields.style.pointerEvents = checked ? "auto" : "none";
+    if (checked) {
+      fields.classList.remove("disabled");
+      fields.style.opacity = "1";
+      fields.style.pointerEvents = "auto";
+    } else {
+      fields.classList.add("disabled");
+      fields.style.opacity = "0.42";
+      fields.style.pointerEvents = "none";
+    }
   }
 
   if (statusDesc) {
     const amtEl = document.getElementById("form-withdraw-amount");
-    const chosenAmt = amtEl && amtEl.value > 0 ? `${amtEl.value} GHS` : "Full Balance";
+    const chosenAmt = amtEl && Number(amtEl.value) > 0 ? `${Number(amtEl.value).toLocaleString()} GHS` : "Full Balance";
     if (checked) {
-      statusDesc.innerHTML = `<span style="color:var(--success);">● Active:</span> Auto-withdrawing ${chosenAmt} once daily (09:00–17:00).`;
+      statusDesc.className = "auto-withdraw-status-banner status-active";
+      statusDesc.innerHTML = `<span class="status-pulse-dot"></span><span><strong>Auto-withdraw: Active</strong> (${chosenAmt} once daily, 09:00–17:00 window)</span>`;
     } else {
-      statusDesc.innerHTML = `<span style="color:var(--text-dim);">○ Disabled:</span> No automatic payouts scheduled for this account.`;
+      statusDesc.className = "auto-withdraw-status-banner status-disabled";
+      statusDesc.innerHTML = `<span class="status-dot-subdued"></span><span><strong>Auto-withdraw: Disabled</strong> (Toggle switch to schedule automated payouts)</span>`;
     }
   }
 }
@@ -301,6 +318,7 @@ export function syncFormWithdrawPills(amount) {
       pill.classList.remove("active");
     }
   });
+  toggleAutoWithdrawFields();
 }
 
 export function selectWithdrawPageAmount(amount) {

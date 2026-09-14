@@ -8,18 +8,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/variables.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/base.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/sidebar.css?v=3.2">
-  <link rel="stylesheet" href="/static/css/header.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/stats.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/accounts.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/terminal.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/analytics.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/modals.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/accessibility.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/toasts.css?v=3.1">
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/variables.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/base.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/sidebar.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/header.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/stats.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/accounts.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/terminal.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/analytics.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/modals.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/accessibility.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/toasts.css?v=3.3">
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=3.3">
 </head>
 <body>
 
@@ -814,9 +814,14 @@
             </div>
           </div>
 
-          <div class="form-group checkbox-group">
-            <label class="checkbox-label">
-              <input type="checkbox" id="form-enabled" checked> Enable this account (Active in daily rotation)
+          <div class="form-group">
+            <label class="toggle-switch-wrapper">
+              <input type="checkbox" id="form-enabled" checked class="toggle-switch-input">
+              <span class="toggle-switch-slider"></span>
+              <span class="toggle-switch-text">
+                <strong>Enable this account</strong>
+                <small>Active in automated daily rotation</small>
+              </span>
             </label>
           </div>
         </div>
@@ -824,17 +829,19 @@
         <!-- Card 3: Auto-Withdrawal Configuration -->
         <div class="form-group-card" id="card-auto-withdraw-group">
           <div class="form-group-card-header">
-            <span class="form-group-card-title">💸 Auto-Withdrawal Configuration</span>
-          </div>
-
-          <div class="form-group checkbox-group">
-            <label class="checkbox-label">
-              <input type="checkbox" id="form-auto-withdraw" onchange="toggleAutoWithdrawFields()"> Enable Automatic Daily Withdrawal
+            <span class="form-group-card-title">💸 Auto-Withdrawal</span>
+            <label class="toggle-switch-wrapper toggle-compact" title="Toggle Auto-Withdrawal">
+              <input type="checkbox" id="form-auto-withdraw" class="toggle-switch-input" onchange="toggleAutoWithdrawFields()">
+              <span class="toggle-switch-slider"></span>
             </label>
-            <span class="form-hint" id="auto-withdraw-status-desc">Status: Disabled. Check to enable automated withdrawals between 09:00 - 17:00.</span>
           </div>
 
-          <div id="auto-withdraw-fields" style="display:flex; flex-direction:column; gap:12px;">
+          <div class="auto-withdraw-status-banner status-disabled" id="auto-withdraw-status-desc">
+            <span class="status-dot-subdued"></span>
+            <span><strong>Auto-withdraw: Disabled</strong> (Toggle switch to schedule automated payouts)</span>
+          </div>
+
+          <div id="auto-withdraw-fields" class="auto-withdraw-fields disabled">
             <div class="form-row">
               <div class="form-group flex-1">
                 <label for="form-withdraw-amount">Fixed Auto-Payout Amount (GHS)</label>
@@ -969,7 +976,7 @@
   <div class="modal-overlay" id="withdraw-modal">
     <div class="modal-card modal-withdraw">
       <div class="modal-header">
-        <h3 id="withdraw-modal-title">💸 Request Withdrawal</h3>
+        <h3 id="withdraw-modal-title">Request Withdrawal</h3>
         <button class="modal-close" onclick="closeWithdrawModal()">&times;</button>
       </div>
       <form id="withdraw-form" onsubmit="handleManualWithdrawSubmit(event)">
@@ -1049,7 +1056,7 @@
   </div>
 
   <!-- Master ES Module Entry Point -->
-  <script type="module" src="/static/js/dashboard.js?v=3.2"></script>
-  <script type="module" src="/static/js/toasts.js?v=3.1"></script>
+  <script type="module" src="/static/js/dashboard.js?v=3.3"></script>
+  <script type="module" src="/static/js/toasts.js?v=3.3"></script>
 </body>
 </html>

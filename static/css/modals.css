@@ -51,42 +51,52 @@
 /* Modal Differentiation Accents */
 .modal-account {
   border-top: 4px solid #8b5cf6;
+  box-shadow: 0 16px 40px -10px rgba(139, 92, 246, 0.28), var(--shadow-lg);
 }
 .modal-account .modal-header h3::before {
   content: "👤 ";
-  font-size: 1rem;
+  font-size: 1.05rem;
+  margin-right: 4px;
 }
 
 .modal-settings {
   border-top: 4px solid var(--accent);
+  box-shadow: 0 16px 40px -10px rgba(59, 130, 246, 0.28), var(--shadow-lg);
 }
 .modal-settings .modal-header h3::before {
   content: "⚙️ ";
-  font-size: 1rem;
+  font-size: 1.05rem;
+  margin-right: 4px;
 }
 
 .modal-import {
   border-top: 4px solid var(--accent-cyan);
+  box-shadow: 0 16px 40px -10px rgba(6, 182, 212, 0.28), var(--shadow-lg);
 }
 .modal-import .modal-header h3::before {
   content: "📥 ";
-  font-size: 1rem;
+  font-size: 1.05rem;
+  margin-right: 4px;
 }
 
 .modal-history {
   border-top: 4px solid #64748b;
+  box-shadow: 0 16px 40px -10px rgba(100, 116, 139, 0.28), var(--shadow-lg);
 }
 .modal-history .modal-header h3::before {
   content: "📜 ";
-  font-size: 1rem;
+  font-size: 1.05rem;
+  margin-right: 4px;
 }
 
 .modal-withdraw {
   border-top: 4px solid #f59e0b;
+  box-shadow: 0 16px 40px -10px rgba(245, 158, 11, 0.28), var(--shadow-lg);
 }
 .modal-withdraw .modal-header h3::before {
   content: "💸 ";
-  font-size: 1rem;
+  font-size: 1.05rem;
+  margin-right: 4px;
 }
 
 /* Settings Rail Layout */
@@ -232,7 +242,13 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  transition: var(--transition);
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.form-group-card.is-active-config {
+  border-color: rgba(34, 211, 238, 0.32);
+  background: rgba(34, 211, 238, 0.025);
+  box-shadow: 0 4px 16px rgba(34, 211, 238, 0.06);
 }
 
 .form-group-card.card-disabled {
@@ -246,7 +262,7 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  padding-bottom: 8px;
+  padding-bottom: 10px;
 }
 
 .form-group-card-title {
@@ -256,6 +272,132 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Sleek Toggle Switch Component */
+.toggle-switch-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-switch-wrapper.toggle-compact {
+  gap: 0;
+}
+
+.toggle-switch-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.toggle-switch-slider {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 9999px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.toggle-switch-slider::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #ffffff;
+  border-radius: 50%;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-switch-input:checked + .toggle-switch-slider {
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
+}
+
+.toggle-switch-input:checked + .toggle-switch-slider::after {
+  transform: translateX(20px);
+  background: #ffffff;
+}
+
+.toggle-switch-input:focus-visible + .toggle-switch-slider {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+}
+
+.toggle-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toggle-switch-text strong {
+  font-size: 0.84rem;
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.toggle-switch-text small {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+/* Auto-Withdrawal Banner & Dynamic State */
+.auto-withdraw-status-banner {
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: var(--transition-fast);
+}
+
+.auto-withdraw-status-banner.status-active {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.28);
+  color: #34d399;
+}
+
+.auto-withdraw-status-banner.status-disabled {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+}
+
+.status-dot-subdued {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.auto-withdraw-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+.auto-withdraw-fields.disabled {
+  opacity: 0.42;
+  pointer-events: none;
+  filter: grayscale(0.5);
 }
 
 @media (max-width: 860px) {
