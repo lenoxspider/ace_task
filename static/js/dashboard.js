@@ -56,7 +56,9 @@ import {
   openSettingsModal,
   closeSettingsModal,
   loadSettings,
-  handleSettingsSubmit
+  handleSettingsSubmit,
+  switchSettingsTab,
+  testTelegramConnection
 } from "./modules/modals.js";
 
 // Multi-Page Router Navigation
@@ -110,6 +112,8 @@ window.handleCsvImport = handleCsvImport;
 window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
 window.handleSettingsSubmit = handleSettingsSubmit;
+window.switchSettingsTab = switchSettingsTab;
+window.testTelegramConnection = testTelegramConnection;
 
 // Page Data Loaders
 window.clearTerminalLogs = clearTerminalLogs;

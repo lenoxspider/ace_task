@@ -37,6 +37,16 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+
+@app.middleware("http")
+async def add_no_cache_header(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # Dashboard Master Session Authentication (#14: 2-Hour Inactivity Timeout)
 ACTIVE_SESSIONS: set = set()
 SESSION_LAST_ACTIVE: Dict[str, float] = {}
@@ -453,6 +463,11 @@ class SettingsUpdate(BaseModel):
     midnight_scheduler_enabled: Optional[str] = None
     min_task_spacing_minutes: Optional[str] = None
     max_task_spacing_minutes: Optional[str] = None
+
+
+class TelegramTestRequest(BaseModel):
+    telegram_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -1275,6 +1290,35 @@ def update_settings_api(data: SettingsUpdate):
 
     broadcast_log("Settings and Auto-Scheduler updated.", "info")
     return {"status": "saved"}
+
+
+@app.post("/api/settings/test-telegram")
+def test_telegram_api(data: TelegramTestRequest):
+    token = (data.telegram_token or db.get_setting("telegram_token", "")).strip()
+    chat_id = (data.telegram_chat_id or db.get_setting("telegram_chat_id", "")).strip()
+    if not token or not chat_id:
+        raise HTTPException(status_code=400, detail="Telegram Bot Token and Chat ID are both required.")
+
+    from ace_bot import TelegramReporter
+    reporter = TelegramReporter(bot_token=token, chat_id=chat_id)
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    msg = (
+        "<b>🔔 Ace775 Automation Alert</b>\n\n"
+        "✅ <b>Telegram Connection Verified!</b>\n"
+        f"Timestamp: <code>{now_str}</code>\n"
+        "Your bot credentials and authorized chat ID are working properly."
+    )
+    try:
+        ok = reporter.send_message(msg)
+        if ok:
+            return {"status": "ok", "message": "Test notification delivered to your Telegram chat!"}
+        else:
+            raise HTTPException(status_code=400, detail="Telegram rejected the message. Verify your bot token and chat ID.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 if __name__ == "__main__":

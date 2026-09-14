@@ -1,0 +1,160 @@
+/* ==============================================================================
+   Ace775 Command Center - Rich Toast Notification Stack
+   ============================================================================== */
+
+.toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 9999;
+  pointer-events: none;
+  max-width: 380px;
+  width: 100%;
+}
+
+.toast {
+  pointer-events: auto;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(17, 24, 39, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-main);
+  transform: translateX(120%);
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+}
+
+.toast.toast-show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast.toast-hide {
+  transform: translateX(120%);
+  opacity: 0;
+}
+
+/* Tone Variants */
+.toast-success {
+  border-left: 4px solid var(--success);
+}
+.toast-success .toast-icon {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.toast-warning {
+  border-left: 4px solid var(--warning);
+}
+.toast-warning .toast-icon {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.toast-error {
+  border-left: 4px solid var(--danger);
+}
+.toast-error .toast-icon {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.toast-info {
+  border-left: 4px solid var(--accent);
+}
+.toast-info .toast-icon {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.toast-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.toast-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toast-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.toast-message {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: var(--transition-fast);
+}
+
+.toast-close:hover {
+  color: var(--text-main);
+}
+
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--accent);
+  width: 100%;
+  transform-origin: left;
+}
+
+.toast-success .toast-progress { background: var(--success); }
+.toast-warning .toast-progress { background: var(--warning); }
+.toast-error .toast-progress { background: var(--danger); }
+.toast-info .toast-progress { background: var(--accent); }
+
+@media (max-width: 640px) {
+  .toast-container {
+    top: auto;
+    bottom: 20px;
+    right: 16px;
+    left: 16px;
+    max-width: none;
+    width: auto;
+  }
+  .toast {
+    transform: translateY(120%);
+  }
+  .toast.toast-show {
+    transform: translateY(0);
+  }
+  .toast.toast-hide {
+    transform: translateY(120%);
+  }
+}

@@ -8,6 +8,30 @@
   padding: 0;
 }
 
+/* Universal element resets so buttons and inputs never fall back to browser-default white */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text-main);
+  background: var(--bg-surface);
+  border: 1px solid var(--panel-border);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 body {
   font-family: var(--font-sans);
   background: var(--bg-main);
@@ -18,6 +42,21 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular numerals for stable financial and stats display */
+.stat-value,
+.acc-stat-val,
+.currency-tag,
+.history-table td,
+.history-table th,
+.accounts-table td,
+.accounts-table th,
+.badge,
+.scheduler-pill,
+.withdraw-info-row strong {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 .app-container {

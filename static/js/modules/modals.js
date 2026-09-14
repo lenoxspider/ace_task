@@ -74,9 +74,26 @@ export function closeAccountModal() {
 }
 
 export function toggleAutoWithdrawFields() {
-  const checked = document.getElementById("form-auto-withdraw").checked;
-  const box = document.getElementById("auto-withdraw-fields");
-  if (box) box.style.display = checked ? "block" : "none";
+  const autoCheckbox = document.getElementById("form-auto-withdraw");
+  const checked = autoCheckbox ? autoCheckbox.checked : false;
+  const cardGroup = document.getElementById("card-auto-withdraw-group");
+  const fields = document.getElementById("auto-withdraw-fields");
+  const statusDesc = document.getElementById("auto-withdraw-status-desc");
+
+  if (fields) {
+    fields.style.opacity = checked ? "1" : "0.45";
+    fields.style.pointerEvents = checked ? "auto" : "none";
+  }
+
+  if (statusDesc) {
+    const amtEl = document.getElementById("form-withdraw-amount");
+    const chosenAmt = amtEl && amtEl.value > 0 ? `${amtEl.value} GHS` : "Full Balance";
+    if (checked) {
+      statusDesc.innerHTML = `<span style="color:var(--success);">● Active:</span> Auto-withdrawing ${chosenAmt} once daily (09:00–17:00).`;
+    } else {
+      statusDesc.innerHTML = `<span style="color:var(--text-dim);">○ Disabled:</span> No automatic payouts scheduled for this account.`;
+    }
+  }
 }
 
 export async function testAccountLogins() {
@@ -865,28 +882,51 @@ export async function handleCsvImport(e) {
 }
 
 /* ==============================================================================
-   5. Settings Modal
+   5. Settings Modal & Page Navigation
    ============================================================================== */
 export function openSettingsModal() {
   loadSettings();
-  document.getElementById("settings-modal").classList.add("active");
+  const modal = document.getElementById("settings-modal");
+  if (modal) {
+    modal.classList.add("active");
+  } else if (window.navigate) {
+    window.navigate("settings");
+  }
 }
 
 export function closeSettingsModal() {
-  document.getElementById("settings-modal").classList.remove("active");
+  const modal = document.getElementById("settings-modal");
+  if (modal) modal.classList.remove("active");
 }
 
 export async function loadSettings() {
   try {
     const data = await api.getSettings();
-    document.getElementById("set-base-url").value = data.base_url || "https://ace775.com";
-    document.getElementById("set-tg-token").value = data.telegram_token || "";
-    document.getElementById("set-tg-chat").value = data.telegram_chat_id || "";
-    document.getElementById("set-sched-time").value = data.schedule_time || "09:00";
-    document.getElementById("set-sched-time-2").value = data.schedule_time_2 || "";
-    document.getElementById("set-retry-mins").value = data.retry_interval_minutes || "30";
-    document.getElementById("set-sched-enabled").checked = data.schedule_enabled === "1";
-    document.getElementById("set-auto-retry").checked = data.auto_retry_outside_hours === "1";
+    const baseUrlEl = document.getElementById("set-base-url");
+    if (baseUrlEl) {
+      baseUrlEl.value = data.base_url || "https://ace775.com";
+      const hostLabel = document.getElementById("settings-footer-host");
+      if (hostLabel) {
+        try {
+          const urlObj = new URL(baseUrlEl.value);
+          hostLabel.textContent = urlObj.hostname;
+        } catch {
+          hostLabel.textContent = baseUrlEl.value;
+        }
+      }
+    }
+
+    const tgTokenEl = document.getElementById("set-tg-token");
+    if (tgTokenEl) tgTokenEl.value = data.telegram_token || "";
+    const tgChatEl = document.getElementById("set-tg-chat");
+    if (tgChatEl) tgChatEl.value = data.telegram_chat_id || "";
+
+    const autoRetryEl = document.getElementById("set-auto-retry");
+    if (autoRetryEl) autoRetryEl.checked = data.auto_retry_outside_hours !== "0";
+
+    const retryIntervalEl = document.getElementById("set-retry-interval");
+    if (retryIntervalEl) retryIntervalEl.value = data.retry_interval_minutes || "30";
+
     const minSpacing = document.getElementById("set-min-spacing");
     if (minSpacing) minSpacing.value = data.min_withdrawal_spacing_minutes || "25";
     const maxSpacing = document.getElementById("set-max-spacing");
@@ -903,6 +943,18 @@ export async function loadSettings() {
   }
 }
 
+export function switchSettingsTab(tabId) {
+  document.querySelectorAll(".settings-nav-btn").forEach(btn => {
+    const isTarget = btn.dataset.tab === tabId;
+    btn.classList.toggle("active", isTarget);
+    btn.setAttribute("aria-selected", isTarget ? "true" : "false");
+  });
+
+  document.querySelectorAll(".settings-tab-panel").forEach(panel => {
+    panel.classList.toggle("active", panel.id === tabId);
+  });
+}
+
 export async function handleSettingsSubmit(e) {
   e.preventDefault();
   const minSpacing = document.getElementById("set-min-spacing");
@@ -910,16 +962,18 @@ export async function handleSettingsSubmit(e) {
   const midEnabled = document.getElementById("set-midnight-enabled");
   const minTaskSpacing = document.getElementById("set-min-task-spacing");
   const maxTaskSpacing = document.getElementById("set-max-task-spacing");
+  const autoRetryEl = document.getElementById("set-auto-retry");
+  const retryIntervalEl = document.getElementById("set-retry-interval");
+  const baseUrlEl = document.getElementById("set-base-url");
+  const tgTokenEl = document.getElementById("set-tg-token");
+  const tgChatEl = document.getElementById("set-tg-chat");
 
   const payload = {
-    base_url: document.getElementById("set-base-url").value.trim(),
-    telegram_token: document.getElementById("set-tg-token").value.trim(),
-    telegram_chat_id: document.getElementById("set-tg-chat").value.trim(),
-    schedule_time: document.getElementById("set-sched-time").value.trim(),
-    schedule_time_2: document.getElementById("set-sched-time-2").value.trim(),
-    retry_interval_minutes: document.getElementById("set-retry-mins").value.trim(),
-    schedule_enabled: document.getElementById("set-sched-enabled").checked ? "1" : "0",
-    auto_retry_outside_hours: document.getElementById("set-auto-retry").checked ? "1" : "0",
+    base_url: baseUrlEl ? baseUrlEl.value.trim() : "https://ace775.com",
+    telegram_token: tgTokenEl ? tgTokenEl.value.trim() : "",
+    telegram_chat_id: tgChatEl ? tgChatEl.value.trim() : "",
+    auto_retry_outside_hours: autoRetryEl && autoRetryEl.checked ? "1" : "0",
+    retry_interval_minutes: retryIntervalEl ? retryIntervalEl.value.trim() : "30",
     min_withdrawal_spacing_minutes: minSpacing ? minSpacing.value.trim() : "25",
     max_withdrawal_spacing_minutes: maxSpacing ? maxSpacing.value.trim() : "50",
     midnight_scheduler_enabled: midEnabled && midEnabled.checked ? "1" : "0",
@@ -931,8 +985,73 @@ export async function handleSettingsSubmit(e) {
     await api.saveSettings(payload);
     closeSettingsModal();
     loadSchedulerStatus();
+
+    const hostLabel = document.getElementById("settings-footer-host");
+    if (hostLabel && payload.base_url) {
+      try {
+        const urlObj = new URL(payload.base_url);
+        hostLabel.textContent = urlObj.hostname;
+      } catch {
+        hostLabel.textContent = payload.base_url;
+      }
+    }
+
     appendTerminalLog("[SYSTEM] Settings and Auto-Scheduler updated successfully.", "success");
+    if (window.showToast) {
+      window.showToast("Settings Saved", "System configuration and automation parameters updated.", "success");
+    }
   } catch (err) {
-    alert("Error: " + err.message);
+    if (window.showToast) {
+      window.showToast("Save Failed", err.message, "error");
+    } else {
+      alert("Error: " + err.message);
+    }
   }
 }
+
+export async function testTelegramConnection() {
+  const tgTokenEl = document.getElementById("set-tg-token");
+  const tgChatEl = document.getElementById("set-tg-chat");
+  const btn = document.getElementById("btn-test-telegram");
+
+  const token = tgTokenEl ? tgTokenEl.value.trim() : "";
+  const chat_id = tgChatEl ? tgChatEl.value.trim() : "";
+
+  if (!token || !chat_id) {
+    if (window.showToast) {
+      window.showToast("Missing Credentials", "Enter both Telegram Bot Token and Chat ID first.", "warning");
+    } else {
+      alert("Please enter both Telegram Bot Token and Chat ID.");
+    }
+    return;
+  }
+
+  const origHtml = btn ? btn.innerHTML : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-icon">⏳</span> Sending Test...';
+  }
+
+  try {
+    const result = await api.testTelegram({ telegram_token: token, telegram_chat_id: chat_id });
+    if (window.showToast) {
+      window.showToast("Telegram Verified", result.message || "Test message sent to Telegram!", "success");
+    }
+    appendTerminalLog("[TELEGRAM] Test message successfully delivered to Telegram chat.", "success");
+  } catch (err) {
+    if (window.showToast) {
+      window.showToast("Connection Failed", err.message, "error");
+    }
+    appendTerminalLog(`[TELEGRAM] Test failed: ${err.message}`, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+}
+
+window.switchSettingsTab = switchSettingsTab;
+window.testTelegramConnection = testTelegramConnection;
+
+

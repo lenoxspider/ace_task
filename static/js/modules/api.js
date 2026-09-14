@@ -138,6 +138,18 @@ export const api = {
     return res.json();
   },
 
+  testTelegram: async (payload) => {
+    const res = await request("/api/settings/test-telegram", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || "Failed to test Telegram notification");
+    }
+    return res.json();
+  },
+
   getHistory: async (accountId = null) => {
     const url = accountId ? `/api/history?account_id=${accountId}` : "/api/history";
     const res = await request(url);

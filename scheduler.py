@@ -31,6 +31,8 @@ class SmartScheduler:
         self.last_run_result: str = "Idle"
         # Midnight Pattern-Free Task Allocation Engine
         self.daily_task_schedule: Dict[int, Dict[str, Any]] = {}
+        # New attribute to track if the midnight‑generated start has been triggered today
+        self.last_midnight_start_date: Optional[str] = None
         self.last_task_schedule_date: Optional[str] = None
         self.last_briefing_date: Optional[str] = None
         self.last_evening_digest_date: Optional[str] = None
@@ -44,6 +46,7 @@ class SmartScheduler:
                 sched_time_2 = db.get_setting("schedule_time_2", "").strip()
                 auto_retry = db.get_setting("auto_retry_outside_hours", "1") == "1"
                 retry_interval = int(db.get_setting("retry_interval_minutes", "30"))
+                midnight_enabled = db.get_setting("midnight_scheduler_enabled", "1") == "1"
 
                 now = datetime.now()
                 now_time_str = now.strftime("%H:%M")
@@ -65,17 +68,16 @@ class SmartScheduler:
                 # 2. Check and dispatch due task allocations
                 self._check_due_task_slots(now)
 
-                # 3. Check for scheduled daily run - Slot 1 (Optional fixed batch trigger)
-                if enabled and sched_time and now_time_str == sched_time and self.last_scheduled_slot_1 != today_str:
-                    logger.info(f"⏰ Auto-Scheduler: Triggering scheduled daily run (Slot 1) at {now_time_str}...")
+                # 3. Scheduled Fixed Slot Triggers (Only if explicit fixed slot configured and midnight scheduler disabled)
+                if not midnight_enabled and enabled and sched_time and now_time_str == sched_time and self.last_scheduled_slot_1 != today_str:
+                    logger.info(f"⏰ Auto-Scheduler: Triggering legacy fixed batch run (Slot 1) at {now_time_str}...")
                     self.last_scheduled_slot_1 = today_str
                     self.retry_at = None
                     if self.run_all_callback:
                         threading.Thread(target=self._run_with_retry_watch, daemon=True).start()
 
-                # 4. Check for scheduled daily run - Slot 2 (Optional fixed batch trigger)
-                elif enabled and sched_time_2 and now_time_str == sched_time_2 and self.last_scheduled_slot_2 != today_str:
-                    logger.info(f"⏰ Auto-Scheduler: Triggering scheduled daily run (Slot 2) at {now_time_str}...")
+                elif not midnight_enabled and enabled and sched_time_2 and now_time_str == sched_time_2 and self.last_scheduled_slot_2 != today_str:
+                    logger.info(f"⏰ Auto-Scheduler: Triggering legacy fixed batch run (Slot 2) at {now_time_str}...")
                     self.last_scheduled_slot_2 = today_str
                     self.retry_at = None
                     if self.run_all_callback:

@@ -1,5 +1,6 @@
 /* ==============================================================================
    Ace775 Command Center - Live Automation Terminal Console
+   Toolbar, log level filters, search, timestamp styling, and level badges
    ============================================================================== */
 
 .terminal-panel {
@@ -17,49 +18,177 @@
   animation: pulseGlow 2s infinite ease-in-out;
 }
 
+/* Console Action Toolbar */
+.terminal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border-top: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--panel-border);
+  flex-wrap: wrap;
+}
+
+.terminal-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.terminal-pill-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.terminal-pill-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.terminal-pill-btn.active {
+  color: #ffffff;
+  background: rgba(34, 211, 238, 0.22);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.25);
+}
+
+.terminal-search-input {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-xs);
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  color: var(--text-main);
+  outline: none;
+  max-width: 150px;
+  transition: var(--transition-fast);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.terminal-search-input:focus {
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.25);
+}
+
 .toggle-label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.76rem;
+  gap: 5px;
+  font-size: 0.74rem;
   color: var(--text-dim);
   cursor: pointer;
   user-select: none;
 }
 
 .terminal-body {
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(5, 8, 14, 0.75);
   font-family: var(--font-mono);
-  padding: 16px 18px;
+  padding: 14px 16px;
   flex: 1;
   max-height: 560px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 0.82rem;
-  line-height: 1.6;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  gap: 4px;
+  font-size: 0.8rem;
+  line-height: 1.55;
 }
 
+/* Color-Coded Log Line with Left Accent Bar */
 .log-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  border-left: 3px solid transparent;
+  background: rgba(255, 255, 255, 0.015);
   word-break: break-word;
   white-space: pre-wrap;
-  transition: opacity 0.15s ease;
+  transition: background 0.12s ease;
 }
 
-.log-info {
+.log-line:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.log-time {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.log-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+
+.log-text {
+  flex: 1;
+}
+
+/* Severity Tones */
+.log-line.log-info {
+  border-left-color: rgba(56, 189, 248, 0.4);
   color: #cbd5e1;
 }
-
-.log-success {
-  color: #34d399;
+.log-line.log-info .log-badge {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
 }
 
-.log-warning {
-  color: #fbbf24;
+.log-line.log-success {
+  border-left-color: var(--success);
+  color: #e2e8f0;
+}
+.log-line.log-success .log-badge {
+  background: var(--success-bg);
+  color: var(--success);
 }
 
-.log-error {
-  color: #f87171;
+.log-line.log-warning {
+  border-left-color: var(--warning);
+  color: #fef08a;
+}
+.log-line.log-warning .log-badge {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.log-line.log-error {
+  border-left-color: var(--danger);
+  color: #fecdd3;
+  background: rgba(251, 113, 133, 0.04);
+}
+.log-line.log-error .log-badge {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.log-line.log-hidden {
+  display: none !important;
 }

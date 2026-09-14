@@ -8,7 +8,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <link rel="stylesheet" href="/static/css/variables.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/base.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/sidebar.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/header.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/stats.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/accounts.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/terminal.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/analytics.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/modals.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/accessibility.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/toasts.css?v=3.1">
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=3.1">
 </head>
 <body>
 
@@ -55,17 +66,27 @@
       </nav>
 
       <div class="sidebar-footer">
-        <div class="scheduler-pill" id="header-scheduler-badge" title="Smart Working Hours Auto-Scheduler">
+        <div class="scheduler-pill" id="header-scheduler-badge" title="Daily Pattern-Free Task Automation">
           <span class="sched-dot"></span>
-          <span id="header-scheduler-text">Scheduler: Active (09:00)</span>
+          <span id="header-scheduler-text">Scheduler: Active</span>
         </div>
-        <div class="sidebar-actions-row">
-          <button id="btn-theme-toggle" class="btn btn-xs btn-ghost" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
-            <span id="theme-icon">☀️</span> Theme
+
+        <!-- Segmented Theme & Contrast Control -->
+        <div class="theme-segmented-control" role="group" aria-label="Theme & Contrast Mode">
+          <button id="theme-btn-dark" class="theme-segment-btn active" onclick="setThemeMode('dark')" title="Dark Theme">
+            <span>🌙</span> Dark
           </button>
-          <button id="btn-high-contrast-toggle" class="btn btn-xs btn-ghost" title="Toggle High Contrast Mode">🔆</button>
-          <button id="btn-logout" class="btn btn-xs btn-ghost" onclick="handleLogout()" title="Lock dashboard & log out">
-            <span>🔒</span> Lock
+          <button id="theme-btn-light" class="theme-segment-btn" onclick="setThemeMode('light')" title="Light Theme">
+            <span>☀️</span> Light
+          </button>
+          <button id="theme-btn-hc" class="theme-segment-btn" onclick="toggleHighContrast()" title="High Contrast Mode" aria-pressed="false">
+            <span>🔆</span> HC
+          </button>
+        </div>
+
+        <div class="sidebar-actions-row">
+          <button id="btn-logout" class="btn btn-xs btn-ghost" style="width:100%; justify-content:center;" onclick="handleLogout()" title="Lock dashboard & log out">
+            <span>🔒</span> Lock Session
           </button>
         </div>
       </div>
@@ -198,8 +219,29 @@
                 <button class="btn btn-xs btn-ghost" onclick="clearTerminalLogs()">Clear</button>
               </div>
             </div>
-            <div class="terminal-body" id="terminal-logs">
-              <div class="log-line log-info">[SYSTEM] Connected to automation stream. Ready.</div>
+
+            <!-- Console Filter Toolbar -->
+            <div class="terminal-toolbar">
+              <div class="terminal-filter-group" role="group" aria-label="Log Filter">
+                <button class="terminal-pill-btn active" data-filter="all" onclick="setTerminalFilter('all')">All</button>
+                <button class="terminal-pill-btn" data-filter="info" onclick="setTerminalFilter('info')">Info</button>
+                <button class="terminal-pill-btn" data-filter="warning" onclick="setTerminalFilter('warning')">Warn</button>
+                <button class="terminal-pill-btn" data-filter="error" onclick="setTerminalFilter('error')">Error</button>
+                <button class="terminal-pill-btn" data-filter="success" onclick="setTerminalFilter('success')">Success</button>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:6px;">
+                <input type="text" class="terminal-search-input" placeholder="Search logs..." oninput="filterTerminalSearch(this.value)">
+                <button class="terminal-pill-btn btn-terminal-pause" onclick="toggleTerminalPause()" title="Pause autoscroll">⏸ Pause</button>
+              </div>
+            </div>
+
+            <div class="terminal-body" id="terminal-logs" role="log" aria-live="polite">
+              <div class="log-line log-info">
+                <span class="log-time">--:--:--</span>
+                <span class="log-badge">info</span>
+                <span class="log-text">[SYSTEM] Connected to automation stream. Ready.</span>
+              </div>
             </div>
           </section>
         </div>
@@ -540,91 +582,160 @@
           </div>
         </div>
 
-        <section class="content-panel" style="max-width:760px;">
-          <form onsubmit="handleSettingsSubmit(event)">
-            <h4 class="settings-subhead">⏰ Working Hours Auto-Scheduler</h4>
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label for="set-sched-time">Daily Slot 1</label>
-                <input type="time" id="set-sched-time" value="09:00" required>
-              </div>
-              <div class="form-group flex-1">
-                <label for="set-sched-time-2">Daily Slot 2 (Optional)</label>
-                <input type="time" id="set-sched-time-2" value="" placeholder="--:--">
-              </div>
-              <div class="form-group flex-1">
-                <label for="set-retry-mins">Retry Delay (Mins)</label>
-                <input type="number" id="set-retry-mins" value="30" min="5" max="180">
-              </div>
-            </div>
+        <section class="settings-layout">
+          <!-- Left Rail Navigation -->
+          <nav class="settings-rail" role="tablist" aria-label="Settings Categories">
+            <button type="button" class="settings-nav-btn active" role="tab" aria-selected="true" data-tab="tab-hours" onclick="switchSettingsTab('tab-hours')">
+              <span>⏰</span> Working Hours
+            </button>
+            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-midnight" onclick="switchSettingsTab('tab-midnight')">
+              <span>🌙</span> Midnight Automation
+            </button>
+            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-pacing" onclick="switchSettingsTab('tab-pacing')">
+              <span>🛡️</span> Anti-Clustering
+            </button>
+            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-telegram" onclick="switchSettingsTab('tab-telegram')">
+              <span>📱</span> Telegram Control
+            </button>
+            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-platform" onclick="switchSettingsTab('tab-platform')">
+              <span>🌐</span> Platform Host
+            </button>
+          </nav>
 
-            <div class="form-group checkbox-group">
-              <label class="checkbox-label">
-                <input type="checkbox" id="set-sched-enabled" checked> Enable daily scheduled auto-run
-              </label>
-            </div>
-
-            <div class="form-group checkbox-group">
-              <label class="checkbox-label">
-                <input type="checkbox" id="set-auto-retry" checked> Auto-retry when "Outside working hours"
-              </label>
-            </div>
-
-            <h4 class="settings-subhead" style="margin-top:16px;">🛡️ Anti-Clustering Withdrawal Pacing Engine</h4>
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label for="set-min-spacing">Min Spacing Interval (Minutes)</label>
-                <input type="number" id="set-min-spacing" value="25" min="15" max="120" required>
-                <span class="form-hint">Minimum separation between consecutive account requests (≥ 15 min anti-clustering guard).</span>
+          <!-- Right Content Area with Sticky Footer Form -->
+          <form class="settings-main" onsubmit="handleSettingsSubmit(event)">
+            <!-- Tab 1: Working Hours & Platform Schedule -->
+            <div class="settings-tab-panel active" id="tab-hours" role="tabpanel">
+              <div class="settings-card">
+                <h4 class="settings-subhead">⏰ Platform Operating Hours & Rest Policy</h4>
+                <p class="settings-desc">Ace775 enforces strict operating windows for both task submissions and withdrawals. The bot respects these operational guards to protect your accounts from detection.</p>
+                <div class="settings-badge-row">
+                  <span class="badge badge-primary">Operating: Mon – Sat (09:00 – 17:00)</span>
+                  <span class="badge badge-neutral">Rest Day: Sunday (Automated Suspension)</span>
+                </div>
               </div>
-              <div class="form-group flex-1">
-                <label for="set-max-spacing">Max Spacing Interval (Minutes)</label>
-                <input type="number" id="set-max-spacing" value="50" min="20" max="240" required>
-                <span class="form-hint">Maximum randomized interval. All requests are spaced and scheduled within 09:00–17:00 (Mon–Fri).</span>
-              </div>
-            </div>
 
-            <h4 class="settings-subhead" style="margin-top:16px;">🌙 Midnight Pattern-Free Task Automation</h4>
-            <div class="form-group checkbox-group">
-              <label class="checkbox-label">
-                <input type="checkbox" id="set-midnight-enabled" checked> Enable Daily Midnight Task Automation (Mon - Sat)
-              </label>
-              <span class="form-hint">Every day starting at 12:00 AM midnight, the bot shuffles accounts and assigns completely random, pattern-free execution times.</span>
-            </div>
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label for="set-min-task-spacing">Min Task Spacing (Minutes)</label>
-                <input type="number" id="set-min-task-spacing" value="15" min="5" max="60" required>
-                <span class="form-hint">Minimum separation between accounts' scheduled tasks.</span>
-              </div>
-              <div class="form-group flex-1">
-                <label for="set-max-task-spacing">Max Task Spacing (Minutes)</label>
-                <input type="number" id="set-max-task-spacing" value="35" min="10" max="120" required>
-                <span class="form-hint">Maximum randomized delay between accounts. Shuffled freshly every day.</span>
+              <div class="settings-card">
+                <h4 class="settings-subhead">🔄 Outside Working Hours Handling</h4>
+                <div class="form-group checkbox-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="set-auto-retry" checked> Auto-retry when "Outside working hours"
+                  </label>
+                  <span class="form-hint">Automatically retries any account task that encountered an outside-hours response.</span>
+                </div>
+
+                <div class="form-group">
+                  <label for="set-retry-interval">Retry Interval (Minutes)</label>
+                  <input type="number" id="set-retry-interval" value="30" min="5" max="120" required>
+                  <span class="form-hint">Time to wait before re-attempting a task that encountered an outside-hours response.</span>
+                </div>
               </div>
             </div>
 
-            <h4 class="settings-subhead" style="margin-top:16px;">📱 Two-Way Telegram Control</h4>
-            <div class="form-group">
-              <label for="set-tg-token">Telegram Bot Token</label>
-              <input type="text" id="set-tg-token" placeholder="8447722246:AAG9_XVP..." autocomplete="off">
-              <span class="form-hint">From @BotFather on Telegram.</span>
+            <!-- Tab 2: Midnight Pattern-Free Task Automation -->
+            <div class="settings-tab-panel" id="tab-midnight" role="tabpanel">
+              <div class="settings-card">
+                <h4 class="settings-subhead">🌙 Daily Pattern-Free Task Automation</h4>
+                <div class="form-group checkbox-group">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="set-midnight-enabled" checked> Enable Pattern-Free Task Automation (Mon - Sat)
+                  </label>
+                  <span class="form-hint">Every day at 12:00 AM midnight, all accounts are shuffled and assigned completely randomized execution times throughout the day, executing all tasks when their time arrives.</span>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <h4 class="settings-subhead">⏱️ Execution Spacing Configuration</h4>
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label for="set-min-task-spacing">Min Task Spacing (Minutes)</label>
+                    <input type="number" id="set-min-task-spacing" value="15" min="5" max="60" required>
+                    <span class="form-hint">Minimum separation between accounts' scheduled execution slots.</span>
+                  </div>
+                  <div class="form-group flex-1">
+                    <label for="set-max-task-spacing">Max Task Spacing (Minutes)</label>
+                    <input type="number" id="set-max-task-spacing" value="35" min="10" max="120" required>
+                    <span class="form-hint">Maximum randomized delay between accounts. Shuffled freshly every midnight.</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div class="form-group">
-              <label for="set-tg-chat">Telegram Chat ID (Authorized)</label>
-              <input type="text" id="set-tg-chat" placeholder="5511238401" autocomplete="off">
-              <span class="form-hint">Only messages from this ID are accepted.</span>
+            <!-- Tab 3: Anti-Clustering Withdrawal Pacing Engine -->
+            <div class="settings-tab-panel" id="tab-pacing" role="tabpanel">
+              <div class="settings-card">
+                <h4 class="settings-subhead">🛡️ Anti-Clustering Withdrawal Pacing Engine</h4>
+                <p class="settings-desc">Protects accounts by preventing simultaneous withdrawal requests. Operates strictly between 09:00 and 17:00 (Mon–Fri). Payout requests are queued and spaced out with randomized intervals.</p>
+                <div class="settings-badge-row">
+                  <span class="badge badge-success">Queue Anti-Clustering Active</span>
+                  <span class="badge badge-warning">09:00 – 17:00 Strict Window</span>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <h4 class="settings-subhead">⏱️ Pacing Interval Boundaries</h4>
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label for="set-min-spacing">Min Spacing Interval (Minutes)</label>
+                    <input type="number" id="set-min-spacing" value="25" min="15" max="120" required>
+                    <span class="form-hint">Minimum separation between consecutive account requests (≥ 15 min anti-clustering guard).</span>
+                  </div>
+                  <div class="form-group flex-1">
+                    <label for="set-max-spacing">Max Spacing Interval (Minutes)</label>
+                    <input type="number" id="set-max-spacing" value="50" min="20" max="240" required>
+                    <span class="form-hint">Maximum randomized interval. Successive withdrawals will be staggered by a random delay within this range.</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <h4 class="settings-subhead" style="margin-top:16px;">🌐 Platform Connection</h4>
-            <div class="form-group">
-              <label for="set-base-url">Website Base URL</label>
-              <input type="text" id="set-base-url" value="https://ace775.com" required>
+            <!-- Tab 4: Two-Way Telegram Control -->
+            <div class="settings-tab-panel" id="tab-telegram" role="tabpanel">
+              <div class="settings-card">
+                <h4 class="settings-subhead">📱 Telegram Bot Credentials</h4>
+                <div class="form-group">
+                  <label for="set-tg-token">Telegram Bot Token</label>
+                  <input type="text" id="set-tg-token" placeholder="8447722246:AAG9_XVP..." autocomplete="off">
+                  <span class="form-hint">Obtained from @BotFather on Telegram.</span>
+                </div>
+
+                <div class="form-group">
+                  <label for="set-tg-chat">Telegram Chat ID (Authorized)</label>
+                  <input type="text" id="set-tg-chat" placeholder="5511238401" autocomplete="off">
+                  <span class="form-hint">Only messages from this ID receive alerts, schedule briefings, and remote execution commands (/status, /run, /balance).</span>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <h4 class="settings-subhead">⚡ Telegram Connection Test</h4>
+                <p class="settings-desc">Send a verification test message to ensure the bot token and chat ID are functioning properly.</p>
+                <div>
+                  <button type="button" class="btn btn-secondary" id="btn-test-telegram" onclick="testTelegramConnection()">
+                    <span class="btn-icon">🔔</span> Test Telegram Connection
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div class="modal-actions">
-              <button type="submit" class="btn btn-primary">
+            <!-- Tab 5: Platform Connection -->
+            <div class="settings-tab-panel" id="tab-platform" role="tabpanel">
+              <div class="settings-card">
+                <h4 class="settings-subhead">🌐 Platform Connection</h4>
+                <div class="form-group">
+                  <label for="set-base-url">Website Base URL</label>
+                  <input type="text" id="set-base-url" value="https://ace775.com" required>
+                  <span class="form-hint">The target platform host domain for API and Playwright browser automated sessions.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sticky Save Footer -->
+            <div class="settings-footer-actions">
+              <div class="settings-footer-info">
+                <span class="status-pulse-dot"></span>
+                <span>Host: <strong id="settings-footer-host">ace775.com</strong> &bull; Hot Reload Ready</span>
+              </div>
+              <button type="submit" class="btn btn-primary" id="btn-save-settings">
                 <span class="btn-icon">💾</span> Save System Settings
               </button>
             </div>
@@ -641,7 +752,7 @@
 
   <!-- Modal: Add/Edit Account -->
   <div class="modal-overlay" id="account-modal">
-    <div class="modal-card">
+    <div class="modal-card modal-account">
       <div class="modal-header">
         <h3 id="modal-title">Add New Account</h3>
         <button class="modal-close" onclick="closeAccountModal()">&times;</button>
@@ -649,102 +760,118 @@
       <form id="account-form" onsubmit="handleAccountSubmit(event)">
         <input type="hidden" id="form-account-id">
 
-        <div class="form-group">
-          <label for="form-phone">Ghana Phone Number</label>
-          <input type="text" id="form-phone" placeholder="0501234567 or 501234567" required autocomplete="username">
-          <span class="form-hint">Leading zero or country code will be formatted automatically.</span>
-        </div>
-
-        <div class="form-group">
-          <label for="form-password">Account Password</label>
-          <input type="password" id="form-password" placeholder="Ace775 account password" autocomplete="current-password">
-        </div>
-
-        <div class="form-group">
-          <label for="form-label">Account Label / Friendly Name</label>
-          <input type="text" id="form-label" placeholder="e.g. John VIP4 or Main Account">
-        </div>
-
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label for="form-mode">Execution Mode</label>
-            <select id="form-mode">
-              <option value="api" selected>API Mode (High Speed)</option>
-              <option value="browser">Browser Mode (Playwright)</option>
-            </select>
+        <!-- Card 1: Credentials -->
+        <div class="form-group-card">
+          <div class="form-group-card-header">
+            <span class="form-group-card-title">🔑 Account Credentials</span>
           </div>
-          <div class="form-group flex-1">
-            <label for="form-max-tasks">Task Cap</label>
-            <input type="number" id="form-max-tasks" min="0" value="0" placeholder="0 = All tasks">
+
+          <div class="form-group">
+            <label for="form-phone">Ghana Phone Number</label>
+            <input type="text" id="form-phone" placeholder="0501234567 or 501234567" required autocomplete="username">
+            <span class="form-hint">Leading zero or country code will be formatted automatically.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="form-password">Account Password</label>
+            <input type="password" id="form-password" placeholder="Ace775 account password" autocomplete="current-password">
+          </div>
+
+          <div class="form-group">
+            <label for="form-label">Account Label / Friendly Name</label>
+            <input type="text" id="form-label" placeholder="e.g. John VIP4 or Main Account">
           </div>
         </div>
 
-        <div class="form-group checkbox-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="form-enabled" checked> Enable this account (Active for task completion & batch runs)
-          </label>
-        </div>
+        <!-- Card 2: Execution & Limits -->
+        <div class="form-group-card">
+          <div class="form-group-card-header">
+            <span class="form-group-card-title">⚡ Execution & Limits</span>
+          </div>
 
-        <!-- Auto-Withdrawal Settings -->
-        <div class="form-section-divider">
-          <span>💸 Auto-Withdrawal Configuration</span>
-        </div>
-
-        <div class="form-group checkbox-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="form-auto-withdraw" onchange="toggleAutoWithdrawFields()"> Enable Automatic Daily Withdrawal
-          </label>
-          <span class="form-hint">Withdraws once daily between 09:00 - 17:00 after tasks complete when balance is ready.</span>
-        </div>
-
-        <div id="auto-withdraw-fields" style="display:none;">
           <div class="form-row">
             <div class="form-group flex-1">
-              <label for="form-withdraw-amount">Fixed Auto-Payout Amount (GHS)</label>
-              <select id="form-withdraw-amount" onchange="syncFormWithdrawPills(this.value)">
-                <option value="0">Full Balance / Auto (Default)</option>
-                <option value="65">65 GHS</option>
-                <option value="170">170 GHS</option>
-                <option value="525">525 GHS</option>
-                <option value="1600">1,600 GHS</option>
-                <option value="4500">4,500 GHS</option>
-                <option value="14000">14,000 GHS</option>
-                <option value="33500">33,500 GHS</option>
-                <option value="65000">65,000 GHS</option>
-                <option value="150000">150,000 GHS</option>
-                <option value="200000">200,000 GHS</option>
-                <option value="500000">500,000 GHS</option>
-                <option value="1000000">1,000,000 GHS</option>
+              <label for="form-mode">Execution Mode</label>
+              <select id="form-mode">
+                <option value="api" selected>API Mode (High Speed)</option>
+                <option value="browser">Browser Mode (Playwright)</option>
               </select>
-              <div class="quick-amounts-grid" id="form-withdraw-pills-grid">
-                <button type="button" class="amount-pill active" onclick="selectFormWithdrawAmount(0)">Full Bal</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(65)">65</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(170)">170</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(525)">525</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(1600)">1600</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(4500)">4500</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(14000)">14000</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(33500)">33500</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(65000)">65000</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(150000)">150000</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(200000)">200000</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(500000)">500000</button>
-                <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(1000000)">1000000</button>
-              </div>
-              <span class="form-hint">Ace775 platform only processes fixed denominations. Tap to select.</span>
             </div>
             <div class="form-group flex-1">
-              <label for="form-withdraw-wallet">Wallet Source</label>
-              <select id="form-withdraw-wallet">
-                <option value="2">Income / Commission (Default)</option>
-                <option value="1">Personal Wallet</option>
-              </select>
+              <label for="form-max-tasks">Task Cap</label>
+              <input type="number" id="form-max-tasks" min="0" value="0" placeholder="0 = All tasks">
             </div>
           </div>
-          <div class="form-group">
-            <label for="form-pay-password">Transaction PIN / Pay Password</label>
-            <input type="password" id="form-pay-password" placeholder="6-digit PIN or payment password" autocomplete="new-password">
-            <span class="form-hint">Stored encrypted. Required by Ace775 to submit withdrawals to your bound MoMo.</span>
+
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="form-enabled" checked> Enable this account (Active in daily rotation)
+            </label>
+          </div>
+        </div>
+
+        <!-- Card 3: Auto-Withdrawal Configuration -->
+        <div class="form-group-card" id="card-auto-withdraw-group">
+          <div class="form-group-card-header">
+            <span class="form-group-card-title">💸 Auto-Withdrawal Configuration</span>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="form-auto-withdraw" onchange="toggleAutoWithdrawFields()"> Enable Automatic Daily Withdrawal
+            </label>
+            <span class="form-hint" id="auto-withdraw-status-desc">Status: Disabled. Check to enable automated withdrawals between 09:00 - 17:00.</span>
+          </div>
+
+          <div id="auto-withdraw-fields" style="display:flex; flex-direction:column; gap:12px;">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="form-withdraw-amount">Fixed Auto-Payout Amount (GHS)</label>
+                <select id="form-withdraw-amount" onchange="syncFormWithdrawPills(this.value)">
+                  <option value="0">Full Balance / Auto (Default)</option>
+                  <option value="65">65 GHS</option>
+                  <option value="170">170 GHS</option>
+                  <option value="525">525 GHS</option>
+                  <option value="1600">1,600 GHS</option>
+                  <option value="4500">4,500 GHS</option>
+                  <option value="14000">14,000 GHS</option>
+                  <option value="33500">33,500 GHS</option>
+                  <option value="65000">65,000 GHS</option>
+                  <option value="150000">150,000 GHS</option>
+                  <option value="200000">200,000 GHS</option>
+                  <option value="500000">500,000 GHS</option>
+                  <option value="1000000">1,000,000 GHS</option>
+                </select>
+                <div class="quick-amounts-grid" id="form-withdraw-pills-grid">
+                  <button type="button" class="amount-pill active" onclick="selectFormWithdrawAmount(0)">Full Bal</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(65)">65</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(170)">170</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(525)">525</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(1600)">1600</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(4500)">4500</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(14000)">14000</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(33500)">33500</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(65000)">65000</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(150000)">150000</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(200000)">200000</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(500000)">500000</button>
+                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(1000000)">1000000</button>
+                </div>
+              </div>
+              <div class="form-group flex-1">
+                <label for="form-withdraw-wallet">Wallet Source</label>
+                <select id="form-withdraw-wallet">
+                  <option value="2">Income / Commission (Default)</option>
+                  <option value="1">Personal Wallet</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="form-pay-password">Transaction PIN / Pay Password</label>
+              <input type="password" id="form-pay-password" placeholder="6-digit PIN or payment password" autocomplete="new-password">
+              <span class="form-hint">Stored encrypted. Required by Ace775 to submit withdrawals to your bound MoMo.</span>
+            </div>
           </div>
         </div>
 
@@ -765,7 +892,7 @@
 
   <!-- Modal: Run History & Audit Log -->
   <div class="modal-overlay" id="history-modal">
-    <div class="modal-card modal-card-wide">
+    <div class="modal-card modal-card-wide modal-history">
       <div class="modal-header">
         <div class="modal-title-group">
           <h3 id="history-modal-title">Execution Audit History</h3>
@@ -798,7 +925,7 @@
 
   <!-- Modal: CSV Account Import -->
   <div class="modal-overlay" id="import-modal">
-    <div class="modal-card">
+    <div class="modal-card modal-import">
       <div class="modal-header">
         <h3>Batch Account Import (CSV)</h3>
         <button class="modal-close" onclick="closeImportModal()">&times;</button>
@@ -829,7 +956,7 @@
 
   <!-- Modal: Manual Withdrawal -->
   <div class="modal-overlay" id="withdraw-modal">
-    <div class="modal-card">
+    <div class="modal-card modal-withdraw">
       <div class="modal-header">
         <h3 id="withdraw-modal-title">💸 Request Withdrawal</h3>
         <button class="modal-close" onclick="closeWithdrawModal()">&times;</button>
@@ -911,8 +1038,7 @@
   </div>
 
   <!-- Master ES Module Entry Point -->
-  <script type="module" src="/static/js/dashboard.js"></script>
-<script defer src="/static/js/toasts.js"></script>
-<script defer src="/static/js/highcontrast.js"></script>
+  <script type="module" src="/static/js/dashboard.js?v=3.1"></script>
+  <script type="module" src="/static/js/toasts.js?v=3.1"></script>
 </body>
 </html>

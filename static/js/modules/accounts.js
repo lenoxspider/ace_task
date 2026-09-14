@@ -25,6 +25,15 @@ function getStatusColor(status) {
   return "var(--text-muted)";
 }
 
+function getStatusIcon(status) {
+  if (!status) return "⚪";
+  if (status.includes("Paused")) return "⏸️";
+  if (status.includes("Completed") || status.includes("Verified")) return "✓";
+  if (status.includes("Running")) return "▶";
+  if (status.includes("Failed") || status.includes("Error")) return "✕";
+  return "•";
+}
+
 export function updateFilterTabCounts() {
   const counts = getCounts();
   const elAll = document.getElementById("filter-cnt-all");
@@ -74,7 +83,10 @@ export function renderAccounts() {
                 <span class="spinner-dot"></span> RUNNING NOW
               </span>
             </div>
-            <span class="acc-phone">+233 ${escapeHtml(acc.phone)}</span>
+            <span class="acc-phone" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>+233 ${escapeHtml(acc.phone)}</span>
+              <button type="button" class="btn-copy-phone" onclick="copyToClipboard('${escapeHtml(acc.phone)}')" title="Copy phone number" aria-label="Copy phone number">📋</button>
+            </span>
             ${acc.auto_withdraw === 1 ? `
               <div class="acc-withdraw-tag ${acc.last_withdraw_date === new Date().toISOString().split('T')[0] ? 'withdrawn-today' : 'withdraw-ready'}">
                 💸 Auto: <strong>${acc.withdraw_amount > 0 ? acc.withdraw_amount + ' GHS' : 'Full Bal'}</strong> 
@@ -101,8 +113,9 @@ export function renderAccounts() {
           </div>
           <div class="acc-stat-box">
             <span class="acc-stat-label">Last Status</span>
-            <span class="acc-stat-val acc-status-val" style="color:${getStatusColor(acc.last_status)}">
-              ${escapeHtml(acc.last_status || 'Never run')}
+            <span class="acc-stat-val acc-status-val" style="color:${getStatusColor(acc.last_status)}; display:inline-flex; align-items:center; gap:4px; justify-content:flex-end;">
+              <span>${getStatusIcon(acc.last_status)}</span>
+              <span>${escapeHtml(acc.last_status || 'Never run')}</span>
             </span>
           </div>
         </div>
@@ -267,3 +280,22 @@ export function setAccountFilter(filterName) {
 export function updateRunningVisuals() {
   renderAccounts();
 }
+
+export function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      if (window.showToast) window.showToast("Copied", `+233 ${text} copied to clipboard.`, "info", 2000);
+    });
+  } else {
+    const input = document.createElement("input");
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    document.body.removeChild(input);
+    if (window.showToast) window.showToast("Copied", `+233 ${text} copied to clipboard.`, "info", 2000);
+  }
+}
+
+window.copyToClipboard = copyToClipboard;
+
