@@ -5,9 +5,16 @@
 
 import { api } from "./modules/api.js";
 import { state, setAccounts } from "./modules/state.js";
-import { initTheme, toggleTheme } from "./modules/theme.js";
+import { initTheme, toggleTheme, setThemeMode, toggleHighContrast } from "./modules/theme.js";
 import { initRouter, navigate } from "./modules/router.js";
-import { initTerminal, appendTerminalLog, clearTerminalLogs } from "./modules/terminal.js";
+import {
+  initTerminal,
+  appendTerminalLog,
+  clearTerminalLogs,
+  setTerminalFilter,
+  filterTerminalSearch,
+  toggleTerminalPause
+} from "./modules/terminal.js";
 import {
   renderAccounts,
   loadAccounts,
@@ -65,7 +72,9 @@ import {
 window.navigate = navigate;
 
 // Theme & Auth
+window.setThemeMode = setThemeMode;
 window.toggleTheme = toggleTheme;
+window.toggleHighContrast = toggleHighContrast;
 window.handleLogout = () => api.logout();
 
 // Account Actions
@@ -115,7 +124,10 @@ window.handleSettingsSubmit = handleSettingsSubmit;
 window.switchSettingsTab = switchSettingsTab;
 window.testTelegramConnection = testTelegramConnection;
 
-// Page Data Loaders
+// Live Terminal Toolbar & Filters
+window.setTerminalFilter = setTerminalFilter;
+window.filterTerminalSearch = filterTerminalSearch;
+window.toggleTerminalPause = toggleTerminalPause;
 window.clearTerminalLogs = clearTerminalLogs;
 window.loadStats = loadStats;
 window.loadAccounts = loadAccounts;

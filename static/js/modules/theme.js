@@ -36,9 +36,18 @@ export function setThemeMode(mode) {
       if (window.showToast) window.showToast("Standard Mode", "Standard color contrast restored.", "info");
     }
   } else {
-    // Switch between dark and light
+    // Switching to light or dark mode explicitly turns OFF high contrast
+    document.documentElement.removeAttribute("data-high-contrast");
+    document.body.classList.remove("high-contrast");
+    localStorage.setItem("ace_high_contrast", "false");
+
     document.documentElement.setAttribute("data-theme", mode);
     localStorage.setItem("ace_theme", mode);
+
+    if (window.showToast) {
+      const modeLabel = mode === "light" ? "Light Mode" : "Dark Mode";
+      window.showToast(modeLabel, `${modeLabel} activated.`, "info");
+    }
   }
 
   const currentTheme = document.documentElement.getAttribute("data-theme") || "dark";

@@ -21,7 +21,7 @@ button {
   appearance: none;
 }
 
-input, select, textarea {
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
   font-family: inherit;
   font-size: inherit;
   color: var(--text-main);
@@ -30,6 +30,14 @@ input, select, textarea {
   outline: none;
   -webkit-appearance: none;
   appearance: none;
+}
+
+input[type="checkbox"]:not(.toggle-switch-input), input[type="radio"] {
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
 }
 
 body {

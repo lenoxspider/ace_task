@@ -177,13 +177,11 @@ function applyFiltersToExistingLogs() {
   });
 }
 
-function initToolbarEvents() {
-  // Expose globally for inline button handlers
-  window.setTerminalFilter = setTerminalFilter;
-  window.filterTerminalSearch = filterTerminalSearch;
-  window.toggleTerminalPause = toggleTerminalPause;
-  window.clearTerminalLogs = clearTerminalLogs;
-}
+// Expose globally for inline button and filter handlers
+window.setTerminalFilter = setTerminalFilter;
+window.filterTerminalSearch = filterTerminalSearch;
+window.toggleTerminalPause = toggleTerminalPause;
+window.clearTerminalLogs = clearTerminalLogs;
 
 function escapeHtml(str) {
   if (!str) return "";
