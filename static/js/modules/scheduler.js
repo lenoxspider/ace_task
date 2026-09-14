@@ -2,7 +2,7 @@
  * Ace775 Command Center - Auto-Scheduler Status Module
  */
 
-import { api } from "./api.js";
+import { api } from "./api.js?v=4.0";
 
 export async function loadSchedulerStatus() {
   try {

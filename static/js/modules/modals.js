@@ -2,12 +2,12 @@
  * Ace775 Command Center - Modals & Dialog Controllers Module
  */
 
-import { api } from "./api.js";
-import { state, getAccountById } from "./state.js";
-import { loadAccounts, escapeHtml } from "./accounts.js";
-import { loadStats } from "./stats.js";
-import { loadSchedulerStatus } from "./scheduler.js";
-import { appendTerminalLog } from "./terminal.js";
+import { api } from "./api.js?v=4.0";
+import { state, getAccountById } from "./state.js?v=4.0";
+import { loadAccounts, escapeHtml } from "./accounts.js?v=4.0";
+import { loadStats } from "./stats.js?v=4.0";
+import { loadSchedulerStatus } from "./scheduler.js?v=4.0";
+import { appendTerminalLog } from "./terminal.js?v=4.0";
 
 /* ==============================================================================
    1. Account Add / Edit Modal

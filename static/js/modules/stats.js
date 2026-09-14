@@ -2,7 +2,7 @@
  * Ace775 Command Center - Metrics & Statistics Module
  */
 
-import { api } from "./api.js";
+import { api } from "./api.js?v=4.0";
 
 export async function loadStats() {
   try {

@@ -170,9 +170,13 @@ class SmartScheduler:
         # Pattern-free randomization: Shuffle accounts so execution order is NEVER fixed
         random.shuffle(pending_accounts)
 
-        # Base time: If running during midnight/early hours (00:00 - 05:00), stagger starting shortly after 00:05
-        if now.hour < 5:
-            base_dt = max(now, now.replace(hour=0, minute=random.randint(5, 18), second=random.randint(0, 59)))
+        # Base time: Ensure tasks start during the 09:00 - 17:00 operational window
+        if now.hour < 9:
+            base_dt = now.replace(hour=9, minute=random.randint(2, 15), second=random.randint(0, 59))
+        elif now.hour >= 17:
+            # If for some reason the scheduler generates late, don't schedule today's tasks
+            self.last_task_schedule_date = today_str
+            return
         else:
             base_dt = now + timedelta(minutes=random.randint(2, 6), seconds=random.randint(0, 59))
 
@@ -188,6 +192,11 @@ class SmartScheduler:
             step_mins = random.randint(min_spacing, max_spacing)
             step_secs = random.randint(0, 59)
             base_dt = base_dt + timedelta(minutes=step_mins, seconds=step_secs)
+
+            # Strict guard: If accumulated spacing pushes the execution time past 17:00,
+            # wrap it around to a random time between 13:00 and 16:45 to prevent clustering and obey window.
+            if base_dt.hour >= 17:
+                base_dt = base_dt.replace(hour=random.randint(13, 16), minute=random.randint(0, 45), second=random.randint(0, 59))
 
             slot_str = base_dt.strftime("%Y-%m-%d %H:%M:%S")
             label = a.get("label") or a["phone"]

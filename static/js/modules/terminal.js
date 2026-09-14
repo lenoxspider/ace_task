@@ -3,7 +3,7 @@
  * Features log filtering (All/Info/Warning/Error), search, pause autoscroll, and batching.
  */
 
-import { state } from "./state.js";
+import { state } from "./state.js?v=4.0";
 
 let activeFilter = "all";
 let activeSearch = "";

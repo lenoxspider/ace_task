@@ -2,7 +2,7 @@
  * Ace775 Command Center - 7-Day Performance Analytics Module
  */
 
-import { api } from "./api.js";
+import { api } from "./api.js?v=4.0";
 
 export async function loadAnalytics() {
   const container = document.getElementById("chart-container");

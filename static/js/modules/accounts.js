@@ -2,9 +2,9 @@
  * Ace775 Command Center - Account Card Component & Management Module
  */
 
-import { state, setAccounts, isAccountRunning, isAccountPaused, getCounts, getFilteredAccounts } from "./state.js";
-import { api } from "./api.js";
-import { appendTerminalLog } from "./terminal.js";
+import { state, setAccounts, isAccountRunning, isAccountPaused, getCounts, getFilteredAccounts } from "./state.js?v=4.0";
+import { api } from "./api.js?v=4.0";
+import { appendTerminalLog } from "./terminal.js?v=4.0";
 
 export function escapeHtml(str) {
   if (!str) return "";

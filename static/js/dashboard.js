@@ -3,10 +3,10 @@
  * Orchestrates modular components, state management, multi-page router, and real-time streams.
  */
 
-import { api } from "./modules/api.js";
-import { state, setAccounts } from "./modules/state.js";
-import { initTheme, toggleTheme, setThemeMode, toggleHighContrast } from "./modules/theme.js";
-import { initRouter, navigate } from "./modules/router.js";
+import { api } from "./modules/api.js?v=4.0";
+import { state, setAccounts } from "./modules/state.js?v=4.0";
+import { initTheme, toggleTheme, setThemeMode, toggleHighContrast } from "./modules/theme.js?v=4.0";
+import { initRouter, navigate } from "./modules/router.js?v=4.0";
 import {
   initTerminal,
   appendTerminalLog,
@@ -14,7 +14,7 @@ import {
   setTerminalFilter,
   filterTerminalSearch,
   toggleTerminalPause
-} from "./modules/terminal.js";
+} from "./modules/terminal.js?v=4.0";
 import {
   renderAccounts,
   loadAccounts,
@@ -26,10 +26,10 @@ import {
   filterAccounts,
   setAccountFilter,
   updateRunningVisuals
-} from "./modules/accounts.js";
-import { loadStats } from "./modules/stats.js";
-import { loadAnalytics } from "./modules/analytics.js";
-import { loadSchedulerStatus } from "./modules/scheduler.js";
+} from "./modules/accounts.js?v=4.0";
+import { loadStats } from "./modules/stats.js?v=4.0";
+import { loadAnalytics } from "./modules/analytics.js?v=4.0";
+import { loadSchedulerStatus } from "./modules/scheduler.js?v=4.0";
 import {
   openAccountModal,
   editAccount,
@@ -66,7 +66,7 @@ import {
   handleSettingsSubmit,
   switchSettingsTab,
   testTelegramConnection
-} from "./modules/modals.js";
+} from "./modules/modals.js?v=4.0";
 
 // Multi-Page Router Navigation
 window.navigate = navigate;
