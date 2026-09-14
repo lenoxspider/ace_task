@@ -41,28 +41,14 @@ export function updateFilterTabCounts() {
 }
 
 export function renderAccounts() {
-  const containers = [
-    document.getElementById("accounts-list"),
-    document.getElementById("accounts-page-list")
-  ].filter(Boolean);
+  const overviewContainer = document.getElementById("accounts-list");
+  const accountsPageContainer = document.getElementById("accounts-page-list");
 
-  if (containers.length === 0) return;
+  if (!overviewContainer && !accountsPageContainer) return;
 
-  const list = getFilteredAccounts();
   updateFilterTabCounts();
 
-  if (list.length === 0) {
-    const isFiltered = state.searchQuery || state.activeFilter !== "all";
-    const emptyHtml = `
-      <div class="empty-placeholder">
-        ${isFiltered ? "No accounts match the current filter or search criteria." : "No accounts configured yet. Click '+ Add Account' to get started."}
-      </div>
-    `;
-    containers.forEach(c => c.innerHTML = emptyHtml);
-    return;
-  }
-
-  const cardsHtml = list.map(acc => {
+  function renderCard(acc) {
     const isRunning = isAccountRunning(acc.id);
     const isPaused = isAccountPaused(acc);
     const earnedToday = Number(acc.earned_today || 0).toFixed(2);
@@ -140,9 +126,36 @@ export function renderAccounts() {
         </div>
       </div>
     `;
-  }).join("");
+  }
 
-  containers.forEach(c => c.innerHTML = cardsHtml);
+  // 1. Overview Page: Only active accounts in rotation
+  if (overviewContainer) {
+    const activeList = state.accounts.filter(a => a.enabled === 1);
+    if (activeList.length === 0) {
+      overviewContainer.innerHTML = `
+        <div class="empty-placeholder">
+          No active accounts in rotation. Unpause or add accounts to start automated tasks.
+        </div>
+      `;
+    } else {
+      overviewContainer.innerHTML = activeList.map(renderCard).join("");
+    }
+  }
+
+  // 2. Accounts Management Page: Full list with tab & search filter
+  if (accountsPageContainer) {
+    const list = getFilteredAccounts();
+    if (list.length === 0) {
+      const isFiltered = state.searchQuery || state.activeFilter !== "all";
+      accountsPageContainer.innerHTML = `
+        <div class="empty-placeholder">
+          ${isFiltered ? "No accounts match the current filter or search criteria." : "No accounts configured yet. Click '+ Add Account' to get started."}
+        </div>
+      `;
+    } else {
+      accountsPageContainer.innerHTML = list.map(renderCard).join("");
+    }
+  }
 }
 
 export async function loadAccounts() {

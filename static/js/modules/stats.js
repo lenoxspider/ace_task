@@ -23,10 +23,10 @@ export async function loadStats() {
     const cards = document.querySelectorAll("#stats-section .stat-card");
     if (cards.length >= 3) {
       if (stats.lifetime_tasks !== undefined) {
-        cards[1].querySelector(".stat-footer").innerText = `Today • Lifetime: ${stats.lifetime_tasks} tasks`;
+        cards[1].querySelector(".stat-footer").innerText = `Today • Lifetime: ${stats.lifetime_tasks} tasks (active)`;
       }
       if (stats.lifetime_earned !== undefined) {
-        cards[2].querySelector(".stat-footer").innerText = `Today • Lifetime: ${stats.lifetime_earned.toFixed(2)} GHS`;
+        cards[2].querySelector(".stat-footer").innerText = `Today • Lifetime: ${stats.lifetime_earned.toFixed(2)} GHS (active)`;
       }
     }
   } catch (err) {

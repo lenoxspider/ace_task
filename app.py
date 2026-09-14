@@ -111,7 +111,7 @@ def broadcast_log(message: str, level: str = "info"):
 # ==============================================================================
 # Execution Workers with Anti-Ban Pacing
 # ==============================================================================
-def run_single_account(account_id: int):
+def run_single_account(account_id: int, force: bool = False):
     account = db.get_account(account_id)
     if not account:
         broadcast_log(f"Account ID {account_id} not found!", "error")
@@ -128,6 +128,15 @@ def run_single_account(account_id: int):
     if account.get("enabled", 1) == 0:
         broadcast_log(f"⏸️ Account '{label}' (+233 {phone}) is PAUSED. Automation skipped.", "warning")
         db.update_account_stats(account_id, last_status="Paused")
+        return
+
+    # Daily Completion Guard: If not explicitly forced, skip accounts that already completed tasks today
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    last_run = account.get("last_run_time") or ""
+    status = (account.get("last_status") or "").lower()
+    tasks_today = int(account.get("tasks_done_today") or 0)
+    if not force and last_run.startswith(today_str) and ("completed" in status or tasks_today >= 5):
+        broadcast_log(f"⏭️ Skipping '{label}' (+233 {phone}): All daily tasks are already completed today ({tasks_today} tasks done).", "info")
         return
 
     RUNNING_ACCOUNT_IDS.add(account_id)
@@ -211,99 +220,85 @@ def run_single_account(account_id: int):
             pay_pwd = updated_account.get("pay_password") or ""
             w_flag = int(updated_account.get("withdraw_wallet") or 2)
 
-            can_w, reason = db.can_withdraw_today(updated_account)
-            if not can_w:
-                broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': {reason}", "info")
-            elif not pay_pwd:
-                broadcast_log(f"⚠️ [Auto-Withdraw] Skipped for '{label}': Transaction PIN/password not configured.", "warning")
+            # Target wallet balance check (Income Wallet = 2 is standard)
+            if w_flag == 2:
+                try:
+                    available_bal = float(updated_account.get("income_balance") or 0.0)
+                except (ValueError, TypeError):
+                    available_bal = 0.0
+                if available_bal <= 0:
+                    try:
+                        available_bal = float(updated_account.get("balance") or 0.0)
+                    except (ValueError, TypeError):
+                        available_bal = 0.0
+                wallet_name = "Income Wallet"
             else:
-                # Target wallet balance check (Income Wallet = 2 is standard)
-                if w_flag == 2:
+                try:
+                    available_bal = float(updated_account.get("personal_balance") or 0.0)
+                except (ValueError, TypeError):
+                    available_bal = 0.0
+                if available_bal <= 0:
                     try:
-                        available_bal = float(updated_account.get("income_balance") or 0.0)
+                        available_bal = float(updated_account.get("balance") or 0.0)
                     except (ValueError, TypeError):
                         available_bal = 0.0
-                    if available_bal <= 0:
-                        try:
-                            available_bal = float(updated_account.get("balance") or 0.0)
-                        except (ValueError, TypeError):
-                            available_bal = 0.0
-                    wallet_name = "Income Wallet"
-                else:
-                    try:
-                        available_bal = float(updated_account.get("personal_balance") or 0.0)
-                    except (ValueError, TypeError):
-                        available_bal = 0.0
-                    if available_bal <= 0:
-                        try:
-                            available_bal = float(updated_account.get("balance") or 0.0)
-                        except (ValueError, TypeError):
-                            available_bal = 0.0
-                    wallet_name = "Personal Wallet"
+                wallet_name = "Personal Wallet"
 
-                raw_denominations = updated_account.get("withdrawal_amounts") or [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
-                allowed_denominations = sorted([float(x) for x in raw_denominations])
-                min_platform_amount = allowed_denominations[0] if allowed_denominations else 65.0
+            raw_denominations = updated_account.get("withdrawal_amounts") or [65, 170, 525, 1600, 4500, 14000, 33500, 65000, 150000, 200000, 500000, 1000000]
+            allowed_denominations = sorted([float(x) for x in raw_denominations])
+            min_platform_amount = allowed_denominations[0] if allowed_denominations else 65.0
 
-                if w_amount > 0:
-                    # User picked a specific fixed amount matching an allowed tier
-                    if available_bal < w_amount:
-                        status_note = f"Holding: {wallet_name} {available_bal:.2f} < Target {w_amount:.2f} GHS"
-                        db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
-                        broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': {wallet_name} balance ({available_bal:.2f} GHS) has not reached configured target ({w_amount:.2f} GHS). Waiting for tasks to accumulate.", "info")
-                    else:
-                        target_withdraw = w_amount
-                        broadcast_log(f"💸 [Auto-Withdraw] {wallet_name} reached target ({available_bal:.2f} GHS >= {target_withdraw:.2f} GHS). Submitting withdrawal of {target_withdraw:.2f} GHS for '{label}'...", "info")
-                        w_bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
-                        w_res = w_bot.apply_withdrawal(amount=target_withdraw, pay_password=pay_pwd, withdrawl_flag=w_flag)
-                        if w_res.get("success"):
-                            w_msg = f"Submitted {target_withdraw:.2f} GHS"
-                            db.update_account_withdrawal_status(account_id, status=w_msg)
-                            broadcast_log(f"✅ [Auto-Withdraw] Success for '{label}': {w_msg}", "success")
-                            if reporter.is_configured:
-                                reporter.send_withdrawal_alert(label, phone, target_withdraw, "Submitted Successfully", w_res.get("message", ""))
-                        else:
-                            fail_msg = f"Failed: {w_res.get('message', 'Unknown error')}"
-                            db.update_account_withdrawal_status(account_id, status=fail_msg)
-                            broadcast_log(f"❌ [Auto-Withdraw] Failed for '{label}': {fail_msg}", "error")
-                            if reporter.is_configured:
-                                reporter.send_withdrawal_alert(label, phone, target_withdraw, "Failed", fail_msg)
+            # Determine target withdrawal amount
+            if w_amount > 0:
+                target_withdraw = w_amount
+            else:
+                target_withdraw = min_platform_amount
+                for tier in reversed(allowed_denominations):
+                    if available_bal >= tier:
+                        target_withdraw = float(tier)
+                        break
+
+            # 1. ALWAYS check account balance first
+            if available_bal < target_withdraw:
+                status_note = f"Holding: {wallet_name} {available_bal:.2f} < Target {target_withdraw:.2f} GHS"
+                db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
+                broadcast_log(
+                    f"⏸️ [Auto-Withdraw] Balance Checked for '{label}': {wallet_name} ({available_bal:.2f} GHS) has not reached target ({target_withdraw:.2f} GHS). Holding until tasks accumulate.",
+                    "info"
+                )
+            else:
+                # 2. Balance target has been reached! Now verify operational constraints
+                can_w, reason = db.can_withdraw_today(updated_account)
+                if not pay_pwd:
+                    db.update_account_withdrawal_status(account_id, status="Missing Payment PIN", withdraw_date=updated_account.get("last_withdraw_date", ""))
+                    broadcast_log(f"⚠️ [Auto-Withdraw] Balance reached target ({available_bal:.2f} GHS >= {target_withdraw:.2f} GHS) for '{label}', but skipped: Transaction PIN/password not configured in account settings.", "warning")
+                elif not can_w:
+                    status_note = f"Ready: {target_withdraw:.2f} GHS (Held: {reason})"
+                    db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
+                    broadcast_log(f"⏸️ [Auto-Withdraw] Target reached ({available_bal:.2f} GHS >= {target_withdraw:.2f} GHS) for '{label}', but held: {reason}", "info")
                 else:
-                    # w_amount == 0: Full Balance / Auto-Max Allowed
-                    if available_bal < min_platform_amount:
-                        status_note = f"Holding: {wallet_name} {available_bal:.2f} < Min {min_platform_amount:.2f} GHS"
-                        db.update_account_withdrawal_status(account_id, status=status_note, withdraw_date=updated_account.get("last_withdraw_date", ""))
-                        broadcast_log(f"⏸️ [Auto-Withdraw] Held for '{label}': {wallet_name} balance ({available_bal:.2f} GHS) is below platform minimum ({min_platform_amount:.2f} GHS). Waiting for tasks to accumulate.", "info")
+                    broadcast_log(f"💸 [Auto-Withdraw] {wallet_name} reached target ({available_bal:.2f} GHS >= {target_withdraw:.2f} GHS). Submitting withdrawal of {target_withdraw:.2f} GHS for '{label}'...", "info")
+                    w_bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
+                    w_res = w_bot.apply_withdrawal(amount=target_withdraw, pay_password=pay_pwd, withdrawl_flag=w_flag)
+                    if w_res.get("success"):
+                        w_msg = f"Submitted {target_withdraw:.2f} GHS"
+                        db.update_account_withdrawal_status(account_id, status=w_msg)
+                        broadcast_log(f"✅ [Auto-Withdraw] Success for '{label}': {w_msg}", "success")
+                        if reporter.is_configured:
+                            reporter.send_withdrawal_alert(label, phone, target_withdraw, "Submitted Successfully", w_res.get("message", ""))
                     else:
-                        # Select highest platform denomination <= available_bal
-                        target_withdraw = min_platform_amount
-                        for tier in reversed(allowed_denominations):
-                            if available_bal >= tier:
-                                target_withdraw = float(tier)
-                                break
-                        broadcast_log(f"💸 [Auto-Withdraw] Auto-Max payout ({available_bal:.2f} GHS in {wallet_name}). Submitting highest platform tier: {target_withdraw:.2f} GHS for '{label}'...", "info")
-                        w_bot = AceApiBot(base_url=base_url, phone=phone, password=pwd)
-                        w_res = w_bot.apply_withdrawal(amount=target_withdraw, pay_password=pay_pwd, withdrawl_flag=w_flag)
-                        if w_res.get("success"):
-                            w_msg = f"Submitted {target_withdraw:.2f} GHS"
-                            db.update_account_withdrawal_status(account_id, status=w_msg)
-                            broadcast_log(f"✅ [Auto-Withdraw] Success for '{label}': {w_msg}", "success")
-                            if reporter.is_configured:
-                                reporter.send_withdrawal_alert(label, phone, target_withdraw, "Submitted Successfully", w_res.get("message", ""))
-                        else:
-                            fail_msg = f"Failed: {w_res.get('message', 'Unknown error')}"
-                            db.update_account_withdrawal_status(account_id, status=fail_msg)
-                            broadcast_log(f"❌ [Auto-Withdraw] Failed for '{label}': {fail_msg}", "error")
-                            if reporter.is_configured:
-                                reporter.send_withdrawal_alert(label, phone, target_withdraw, "Failed", fail_msg)
+                        fail_msg = f"Failed: {w_res.get('message', 'Unknown error')}"
+                        db.update_account_withdrawal_status(account_id, status=fail_msg)
+                        broadcast_log(f"❌ [Auto-Withdraw] Failed for '{label}': {fail_msg}", "error")
+                        if reporter.is_configured:
+                            reporter.send_withdrawal_alert(label, phone, target_withdraw, "Failed", fail_msg)
 
     except Exception as e:
-        err_str = str(e)
-        logger.error(f"Error running account {phone}: {e}", exc_info=True)
-        broadcast_log(f"❌ Error on '{label}': {err_str}", "error")
-        db.update_account_stats(account_id, last_status=f"Failed: {err_str[:30]}")
+        logger.error(f"Error running account {account_id}: {e}", exc_info=True)
+        broadcast_log(f"❌ Error running '{label}': {e}", "error")
+        db.update_account_stats(account_id, last_status=f"Error: {str(e)[:50]}")
         if reporter.is_configured:
-            reporter.send_error_alert(label, phone, err_str)
+            reporter.send_error_alert(label, phone, str(e))
     finally:
         RUNNING_ACCOUNT_IDS.discard(account_id)
         broadcast_log(f"[ACCOUNT_IDLE:{account_id}]", "event")
@@ -324,19 +319,41 @@ def run_all_enabled_accounts():
     try:
         accounts = db.get_accounts()
         enabled_accounts = [a for a in accounts if a["enabled"]]
-        broadcast_log(f"📋 Starting batch execution for {len(enabled_accounts)} active account(s)...", "info")
+        today_str = datetime.now().strftime("%Y-%m-%d")
 
-        for idx, acc in enumerate(enabled_accounts, 1):
-            broadcast_log(f"\n--- Processing account {idx}/{len(enabled_accounts)}: {acc['phone']} ---", "info")
-            run_single_account(acc["id"])
+        # Skip accounts that have already completed all daily tasks today
+        pending_accounts = []
+        already_completed = []
+        for a in enabled_accounts:
+            last_run = a.get("last_run_time") or ""
+            status = (a.get("last_status") or "").lower()
+            tasks_today = int(a.get("tasks_done_today") or 0)
+            if last_run.startswith(today_str) and ("completed" in status or tasks_today >= 5):
+                already_completed.append(a)
+            else:
+                pending_accounts.append(a)
+
+        if already_completed:
+            labels = ", ".join([f"'{a.get('label') or a['phone']}'" for a in already_completed])
+            broadcast_log(f"ℹ️ {len(already_completed)} account(s) already completed today's tasks ({labels}) and will be skipped.", "info")
+
+        if not pending_accounts:
+            broadcast_log(f"🎉 All {len(enabled_accounts)} active account(s) have already completed their tasks for today! Nothing to run.", "success")
+            return
+
+        broadcast_log(f"📋 Starting batch execution for {len(pending_accounts)} remaining active account(s)...", "info")
+
+        for idx, acc in enumerate(pending_accounts, 1):
+            broadcast_log(f"\n--- Processing account {idx}/{len(pending_accounts)}: {acc['phone']} ---", "info")
+            run_single_account(acc["id"], force=False)
 
             # Account pacing: randomized pause before next account (15s - 25s)
-            if idx < len(enabled_accounts):
+            if idx < len(pending_accounts):
                 pacing = random.uniform(15.0, 25.0)
                 broadcast_log(f"⏳ Account Pacing: waiting {pacing:.1f}s before next account...", "info")
                 time.sleep(pacing)
 
-        broadcast_log("🎉 Batch execution for all active accounts finished!", "success")
+        broadcast_log("🎉 Batch execution for active accounts finished!", "success")
     finally:
         is_running_lock = False
 
@@ -1036,7 +1053,7 @@ def trigger_single_run(account_id: int, background_tasks: BackgroundTasks):
         broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Tasks suspended today.", "warning")
         db.update_account_stats(account_id, last_status="Sunday: Rest Day")
         return {"status": "skipped", "message": "Sunday: Ace775 platform is closed for tasks"}
-    background_tasks.add_task(run_single_account, account_id)
+    background_tasks.add_task(run_single_account, account_id, True)
     return {"status": "started", "message": f"Run queued for {account['phone']}"}
 
 

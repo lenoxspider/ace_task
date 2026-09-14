@@ -501,9 +501,40 @@ def get_last_7_days_analytics() -> List[Dict[str, Any]]:
     # Generate past 7 days list
     today = datetime.now()
     dates = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
+    min_date = dates[0]
     
-    cursor.execute("SELECT date, tasks_count, earned_ghs FROM daily_records WHERE date >= ?", (dates[0],))
-    rows = {row["date"]: {"tasks": row["tasks_count"], "earned": row["earned_ghs"]} for row in cursor.fetchall()}
+    # Track earnings and tasks only for active accounts (enabled = 1)
+    cursor.execute("""
+        SELECT 
+            SUBSTR(rh.run_time, 1, 10) as date, 
+            SUM(rh.tasks_done) as tasks, 
+            SUM(rh.earned) as earned 
+        FROM run_history rh 
+        JOIN accounts a ON rh.account_id = a.id 
+        WHERE a.enabled = 1 AND rh.run_time >= ? 
+        GROUP BY SUBSTR(rh.run_time, 1, 10)
+    """, (min_date,))
+    rows = {row["date"]: {"tasks": row["tasks"] or 0, "earned": row["earned"] or 0.0} for row in cursor.fetchall()}
+
+    # Ensure today's chart point directly reflects active accounts' current earnings
+    cursor.execute("""
+        SELECT 
+            SUM(tasks_done_today) as tasks, 
+            SUM(earned_today) as earned 
+        FROM accounts 
+        WHERE enabled = 1
+    """)
+    today_active = cursor.fetchone()
+    today_str = today.strftime("%Y-%m-%d")
+    if today_active:
+        today_tasks = today_active["tasks"] or 0
+        today_earned = today_active["earned"] or 0.0
+        if today_str in rows:
+            rows[today_str]["tasks"] = max(rows[today_str]["tasks"], today_tasks)
+            rows[today_str]["earned"] = max(rows[today_str]["earned"], today_earned)
+        else:
+            rows[today_str] = {"tasks": today_tasks, "earned": today_earned}
+
     conn.close()
 
     result = []
@@ -525,11 +556,11 @@ def get_dashboard_stats() -> Dict[str, Any]:
     cursor.execute("""
         SELECT 
             COUNT(*) as total, 
-            SUM(enabled) as active, 
-            SUM(tasks_done_today) as tasks, 
-            SUM(earned_today) as earned,
-            SUM(total_tasks_done) as lifetime_tasks,
-            SUM(total_earned_ghs) as lifetime_earned
+            SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) as active, 
+            SUM(CASE WHEN enabled = 1 THEN tasks_done_today ELSE 0 END) as tasks, 
+            SUM(CASE WHEN enabled = 1 THEN earned_today ELSE 0 END) as earned,
+            SUM(CASE WHEN enabled = 1 THEN total_tasks_done ELSE 0 END) as lifetime_tasks,
+            SUM(CASE WHEN enabled = 1 THEN total_earned_ghs ELSE 0 END) as lifetime_earned
         FROM accounts
     """)
     row = cursor.fetchone()
