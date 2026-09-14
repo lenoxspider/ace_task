@@ -8,18 +8,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/variables.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/base.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/sidebar.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/header.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/stats.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/accounts.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/terminal.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/analytics.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/modals.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/accessibility.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/toasts.css?v=3.4">
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=3.4">
+  <link rel="stylesheet" href="/static/css/variables.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/base.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/sidebar.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/header.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/stats.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/accounts.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/terminal.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/analytics.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/modals.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/accessibility.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/toasts.css?v=3.5">
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=3.5">
 </head>
 <body>
 
@@ -31,12 +31,12 @@
 
     <!-- Navigation Sidebar -->
     <aside class="sidebar" id="sidebar">
+      <!-- 1. Header: Brand & Collapse -->
       <div class="sidebar-header">
         <div class="sidebar-brand-wrapper">
-          <div class="sidebar-logo" title="Ace775 Automation">⚡</div>
+          <div class="sidebar-logo" title="Ace775 Command Center">⚡</div>
           <div class="sidebar-brand">
             <h1>Ace775 Command</h1>
-            <p class="subtitle">Multi-Account Automation</p>
           </div>
         </div>
         <button type="button" class="btn-sidebar-collapse" id="btn-sidebar-collapse" onclick="toggleSidebarCollapse()" title="Collapse sidebar (Ctrl+B)" aria-label="Toggle sidebar collapse">
@@ -44,61 +44,79 @@
         </button>
       </div>
 
+      <!-- 2. Live Operational Status Card -->
+      <div class="sidebar-status-card" id="sidebar-op-widget" data-title="Operational Window: 09:00 - 17:00 active">
+        <div class="status-card-header">
+          <span class="status-indicator-dot dot-active" id="op-dot"></span>
+          <span class="status-card-state" id="op-state-title">Operational Window</span>
+        </div>
+        <div class="status-card-details">
+          <span class="status-card-time" id="op-window-hours">09:00 – 17:00 Mon–Sat</span>
+          <span class="status-card-sub" id="op-sub-info">Scheduler: Active</span>
+        </div>
+      </div>
+
+      <!-- 3. Navigation Groups -->
       <nav class="sidebar-nav">
-        <span class="nav-section-title">Core Management</span>
-        <a class="nav-link active" data-page="overview" data-title="Overview" onclick="navigate('overview')">
-          <span class="nav-icon">📊</span>
-          <span class="nav-label">Overview</span>
-        </a>
-        <a class="nav-link" data-page="accounts" data-title="Accounts" onclick="navigate('accounts')">
-          <span class="nav-icon">👥</span>
-          <span class="nav-label">Accounts</span>
-          <span class="nav-badge" id="badge-account-count">0</span>
-        </a>
-        <a class="nav-link" data-page="terminal" data-title="Live Terminal" onclick="navigate('terminal')">
-          <span class="nav-icon">💻</span>
-          <span class="nav-label">Live Terminal</span>
-          <span class="sched-dot"></span>
-        </a>
-
-        <span class="nav-section-title" style="margin-top:12px;">Finance & Operations</span>
-        <a class="nav-link" data-page="withdrawals" data-title="Withdrawals" onclick="navigate('withdrawals')">
-          <span class="nav-icon">💸</span>
-          <span class="nav-label">Withdrawals</span>
-        </a>
-        <a class="nav-link" data-page="history" data-title="Audit History" onclick="navigate('history')">
-          <span class="nav-icon">📜</span>
-          <span class="nav-label">Audit History</span>
-        </a>
-        <a class="nav-link" data-page="settings" data-title="Settings" onclick="navigate('settings')">
-          <span class="nav-icon">⚙️</span>
-          <span class="nav-label">Settings</span>
-        </a>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="scheduler-pill" id="header-scheduler-badge" title="Daily Pattern-Free Task Automation">
-          <span class="sched-dot"></span>
-          <span class="footer-label" id="header-scheduler-text">Scheduler: Active</span>
+        <div class="nav-group">
+          <span class="nav-section-title">Core Management</span>
+          <a class="nav-link active" data-page="overview" data-title="Overview" onclick="navigate('overview')">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">Overview</span>
+          </a>
+          <a class="nav-link" data-page="accounts" data-title="Accounts" onclick="navigate('accounts')">
+            <span class="nav-icon">👥</span>
+            <span class="nav-label">Accounts</span>
+            <span class="nav-badge" id="badge-account-count">0</span>
+          </a>
+          <a class="nav-link" data-page="terminal" data-title="Live Terminal" onclick="navigate('terminal')">
+            <span class="nav-icon">💻</span>
+            <span class="nav-label">Live Terminal</span>
+            <span class="sched-dot"></span>
+          </a>
+          <a class="nav-link" data-page="withdrawals" data-title="Withdrawals" onclick="navigate('withdrawals')">
+            <span class="nav-icon">💸</span>
+            <span class="nav-label">Withdrawals</span>
+          </a>
         </div>
 
-        <!-- Segmented Theme & Contrast Control -->
+        <div class="sidebar-divider"></div>
+
+        <div class="nav-group">
+          <span class="nav-section-title">System & Records</span>
+          <a class="nav-link" data-page="history" data-title="Audit History" onclick="navigate('history')">
+            <span class="nav-icon">📜</span>
+            <span class="nav-label">Audit History</span>
+          </a>
+          <a class="nav-link" data-page="settings" data-title="Settings" onclick="navigate('settings')">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">Settings</span>
+          </a>
+        </div>
+      </nav>
+
+      <!-- 4. Footer: Theme Segmented Control & Metadata -->
+      <div class="sidebar-footer">
         <div class="theme-segmented-control" role="group" aria-label="Theme & Contrast Mode">
-          <button id="theme-btn-dark" class="theme-segment-btn active" onclick="setThemeMode('dark')" title="Dark Theme">
+          <button id="theme-btn-dark" class="theme-segment-btn active" onclick="setThemeMode('dark')" title="Dark Theme" aria-label="Dark Theme">
             <span>🌙</span> <span class="segment-label">Dark</span>
           </button>
-          <button id="theme-btn-light" class="theme-segment-btn" onclick="setThemeMode('light')" title="Light Theme">
+          <button id="theme-btn-light" class="theme-segment-btn" onclick="setThemeMode('light')" title="Light Theme" aria-label="Light Theme">
             <span>☀️</span> <span class="segment-label">Light</span>
           </button>
-          <button id="theme-btn-hc" class="theme-segment-btn" onclick="toggleHighContrast()" title="High Contrast Mode" aria-pressed="false">
+          <button id="theme-btn-hc" class="theme-segment-btn" onclick="toggleHighContrast()" title="High Contrast Mode" aria-pressed="false" aria-label="High Contrast Mode">
             <span>🔆</span> <span class="segment-label">HC</span>
           </button>
         </div>
 
         <div class="sidebar-actions-row">
-          <button id="btn-logout" class="btn btn-xs btn-ghost btn-logout" style="width:100%; justify-content:center;" onclick="handleLogout()" title="Lock dashboard & log out">
+          <button id="btn-logout" class="btn btn-xs btn-ghost btn-logout" onclick="handleLogout()" title="Lock dashboard & log out">
             <span>🔒</span> <span class="footer-label">Lock Session</span>
           </button>
+        </div>
+
+        <div class="sidebar-meta-tag">
+          <span>ace-v3.5</span> • <span>127.0.0.1:8000</span>
         </div>
       </div>
     </aside>
@@ -1056,7 +1074,7 @@
   </div>
 
   <!-- Master ES Module Entry Point -->
-  <script type="module" src="/static/js/dashboard.js?v=3.4"></script>
-  <script type="module" src="/static/js/toasts.js?v=3.4"></script>
+  <script type="module" src="/static/js/dashboard.js?v=3.5"></script>
+  <script type="module" src="/static/js/toasts.js?v=3.5"></script>
 </body>
 </html>
