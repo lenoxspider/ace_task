@@ -60,12 +60,86 @@ class TelegramCommandBot:
             msg = (
                 "⚡ <b>Ace775 Command Center Bot</b>\n\n"
                 "Available commands:\n"
+                "• <b>/schedule</b> or <b>/today</b> - View today's randomized task timeline & withdrawal queue\n"
                 "• <b>/status</b> or <b>/balance</b> - View live account balances & today's earnings\n"
                 "• <b>/run</b> - Trigger automation run for all active accounts\n"
                 "• <b>/accounts</b> - List all configured accounts\n"
                 "• <b>/help</b> - Show this message\n"
             )
             self.send_message(msg)
+
+        elif cmd in ["/schedule", "/today", "/timeline"]:
+            from scheduler import scheduler
+            now = datetime.now()
+            today_str = now.strftime("%Y-%m-%d")
+            time_now_str = now.strftime("%H:%M:%S")
+
+            if now.weekday() == 6:
+                self.send_message(
+                    "⏸️ <b>Today is Sunday (Platform Rest Day)!</b>\n\n"
+                    "• Ace775 tasks are suspended on Sundays.\n"
+                    "• Withdrawals are closed on weekends.\n"
+                    "• Next task automation cycle starts Monday at 12:00 AM midnight."
+                )
+                return
+
+            sched_status = scheduler.get_status()
+            task_slots = sched_status.get("daily_task_schedule", [])
+            q_items = db.get_withdrawal_queue()
+
+            lines = [
+                "📅 <b>Ace775 Today's Operations Schedule</b>",
+                f"🕒 <i>Current Time: {time_now_str} (GMT)</i>",
+                ""
+            ]
+
+            # 1. Tasks section
+            lines.append("🤖 <b>Automated Tasks Timeline (Pattern-Free):</b>")
+            if not task_slots:
+                lines.append("  <i>No active task slots allocated yet today.</i>")
+            else:
+                sorted_slots = sorted(task_slots, key=lambda x: x.get("scheduled_time", ""))
+                for s in sorted_slots:
+                    st = s.get("scheduled_time", "")
+                    t_disp = st[11:16] if len(st) >= 16 else st
+                    status = s.get("status", "scheduled")
+                    status_icon = "⏳"
+                    if status == "running":
+                        status_icon = "⚙️"
+                    elif status == "completed":
+                        status_icon = "✅"
+                    elif status == "failed":
+                        status_icon = "❌"
+                    label = s.get("label") or s.get("phone", "Account")
+                    lines.append(f"  {status_icon} <b>{t_disp}</b> — {label} (<code>{status}</code>)")
+
+            # 2. Withdrawals queue section
+            lines.extend([
+                "",
+                "💸 <b>Withdrawal Queue (09:00 - 17:00 Mon-Fri):</b>"
+            ])
+            active_q = [q for q in q_items if q.get("status") in ("pending", "processing")]
+            if not active_q:
+                lines.append("  <i>No pending withdrawals in queue.</i>")
+            else:
+                for q in active_q:
+                    q_time = q.get("scheduled_for", "")
+                    t_disp = q_time[11:16] if len(q_time) >= 16 else q_time
+                    amt = float(q.get("amount") or 0.0)
+                    lbl = q.get("label") or q.get("phone", "Account")
+                    st = q.get("status")
+                    icon = "⚙️" if st == "processing" else "⏳"
+                    lines.append(f"  {icon} <b>{t_disp}</b> — {lbl}: {amt:.2f} GHS [{st}]")
+
+            # 3. Schedule Rules
+            lines.extend([
+                "",
+                "ℹ️ <b>Operating Hours:</b>",
+                "• <b>Tasks:</b> Mon - Sat, 24/7 anytime (Randomized anti-pattern intervals)",
+                "• <b>Withdrawals:</b> Mon - Fri, 09:00 - 17:00 (Randomized anti-clustering)"
+            ])
+
+            self.send_message("\n".join(lines))
 
         elif cmd in ["/status", "/balance"]:
             stats = db.get_dashboard_stats()

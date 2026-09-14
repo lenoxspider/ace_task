@@ -32,6 +32,8 @@ class SmartScheduler:
         # Midnight Pattern-Free Task Allocation Engine
         self.daily_task_schedule: Dict[int, Dict[str, Any]] = {}
         self.last_task_schedule_date: Optional[str] = None
+        self.last_briefing_date: Optional[str] = None
+        self.last_evening_digest_date: Optional[str] = None
 
     def loop(self):
         logger.info("Smart Auto-Scheduler service started.")
@@ -88,6 +90,9 @@ class SmartScheduler:
 
                 # 6. Anti-clustering Withdrawal Queue Worker (Strictly 09:00 - 17:00, Mon-Fri)
                 self._check_withdrawal_queue()
+
+                # 7. Daily Evening Financial Digest (18:00 daily after withdrawal window closes)
+                self._check_evening_digest(now, today_str)
 
             except Exception as e:
                 logger.error(f"Scheduler loop error: {e}")
@@ -202,6 +207,76 @@ class SmartScheduler:
             if self.broadcast_callback:
                 self.broadcast_callback(msg, "info")
 
+            # Dispatch Daily Telegram Schedule Briefing once per day
+            if self.last_briefing_date != today_str:
+                self.last_briefing_date = today_str
+                self._send_telegram_schedule_briefing(today_str)
+
+    def _send_telegram_schedule_briefing(self, today_str: str):
+        """Sends morning/midnight operations briefing to Telegram."""
+        try:
+            tg_token = db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", ""))
+            tg_chat = db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", ""))
+            from ace_bot import TelegramReporter
+            reporter = TelegramReporter(bot_token=tg_token, chat_id=tg_chat)
+            if reporter.is_configured and self.daily_task_schedule:
+                formatted_date = datetime.strptime(today_str, "%Y-%m-%d").strftime("%A, %b %d, %Y")
+                reporter.send_daily_schedule_briefing(list(self.daily_task_schedule.values()), formatted_date)
+                logger.info(f"📱 Sent daily operations briefing to Telegram for {today_str}.")
+        except Exception as e:
+            logger.error(f"Failed to dispatch daily Telegram schedule briefing: {e}")
+
+    def _check_evening_digest(self, now: datetime, today_str: str):
+        """Dispatches evening financial summary at 18:00 after withdrawal window closes."""
+        if now.hour != 18 or self.last_evening_digest_date == today_str:
+            return
+
+        tg_token = db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", ""))
+        tg_chat = db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", ""))
+        from ace_bot import TelegramReporter
+        reporter = TelegramReporter(bot_token=tg_token, chat_id=tg_chat)
+        if not reporter.is_configured:
+            self.last_evening_digest_date = today_str
+            return
+
+        try:
+            stats = db.get_dashboard_stats()
+            accounts = db.get_accounts(mask_passwords=True)
+            q_items = db.get_withdrawal_queue()
+
+            today_completed_w = [
+                q for q in q_items
+                if q.get("status") == "completed" and (q.get("created_at") or "").startswith(today_str)
+            ]
+            queued_w = [q for q in q_items if q.get("status") in ("pending", "processing")]
+
+            comp_w_amount = sum(float(q.get("amount") or 0.0) for q in today_completed_w)
+            queued_w_amount = sum(float(q.get("amount") or 0.0) for q in queued_w)
+
+            total_portfolio_balance = sum(float(a.get("balance") or 0.0) for a in accounts)
+            total_income_balance = sum(float(a.get("income_balance") or 0.0) for a in accounts)
+            total_personal_balance = sum(float(a.get("personal_balance") or 0.0) for a in accounts)
+
+            summary = {
+                "date_str": now.strftime("%A, %b %d, %Y"),
+                "tasks_completed_today": stats.get("tasks_completed_today", 0),
+                "total_earned_today": stats.get("total_earned_today", 0.0),
+                "total_portfolio_balance": total_portfolio_balance,
+                "total_income_balance": total_income_balance,
+                "total_personal_balance": total_personal_balance,
+                "withdrawals_completed_count": len(today_completed_w),
+                "withdrawals_completed_amount": comp_w_amount,
+                "withdrawals_queued_count": len(queued_w),
+                "withdrawals_queued_amount": queued_w_amount,
+                "accounts": accounts
+            }
+
+            reporter.send_daily_financial_digest(summary)
+            logger.info("📊 Daily evening financial digest sent to Telegram.")
+            self.last_evening_digest_date = today_str
+        except Exception as e:
+            logger.error(f"Failed to send evening financial digest: {e}")
+
     def _check_due_task_slots(self, now: datetime):
         """Dispatches tasks for accounts whose randomized time slot has arrived."""
         if not self.run_single_callback:
@@ -297,6 +372,11 @@ class SmartScheduler:
                 db.update_queue_item_status(queue_id, "failed", f"Login failed: {err_msg}")
                 if self.broadcast_callback:
                     self.broadcast_callback(f"❌ [Withdrawal Queue] Login failed for '{label}': {err_msg}", "error")
+                tg_token = db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", ""))
+                tg_chat = db.get_setting("telegram_chat_id", os.getenv("TELEGRAM_CHAT_ID", ""))
+                reporter = TelegramReporter(bot_token=tg_token, chat_id=tg_chat)
+                if reporter.is_configured:
+                    reporter.send_account_health_alert(label, phone, "Withdrawal Login Failed (Invalid Credentials)", err_msg)
                 return
 
             # Re-verify live wallet balance

@@ -175,7 +175,16 @@ def run_single_account(account_id: int, force: bool = False):
         if stats.get("error"):
             status_msg = stats["error"]
             if reporter.is_configured:
-                reporter.send_error_alert(label, phone, stats["error"])
+                err_lower = status_msg.lower()
+                is_auth_error = any(w in err_lower for w in [
+                    "login failed", "invalid credentials", "password", "user does not exist",
+                    "account disabled", "frozen", "token rejected", "credentials rejected",
+                    "forbidden", "auth"
+                ])
+                if is_auth_error:
+                    reporter.send_account_health_alert(label, phone, "Authentication / Credential Failure", status_msg)
+                else:
+                    reporter.send_error_alert(label, phone, status_msg)
 
         try:
             inc_bal = float(stats.get("income_balance") or 0.0)
@@ -308,7 +317,13 @@ def run_single_account(account_id: int, force: bool = False):
         broadcast_log(f"❌ Error running '{label}': {e}", "error")
         db.update_account_stats(account_id, last_status=f"Error: {str(e)[:50]}")
         if reporter.is_configured:
-            reporter.send_error_alert(label, phone, str(e))
+            err_str = str(e)
+            err_lower = err_str.lower()
+            is_auth_error = any(w in err_lower for w in ["login", "password", "credential", "auth", "token", "frozen", "disabled"])
+            if is_auth_error:
+                reporter.send_account_health_alert(label, phone, "Authentication / Credential Error", err_str)
+            else:
+                reporter.send_error_alert(label, phone, err_str)
     finally:
         RUNNING_ACCOUNT_IDS.discard(account_id)
         broadcast_log(f"[ACCOUNT_IDLE:{account_id}]", "event")

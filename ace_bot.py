@@ -138,6 +138,102 @@ class TelegramReporter:
             lines.append(f"ℹ️ <b>Details:</b> {details}")
         return self.send_message("\n".join(lines))
 
+    def send_daily_schedule_briefing(self, schedule_items: list, date_str: str) -> bool:
+        """Dispatches daily operations briefing with randomized task execution timeline."""
+        if not self.is_configured or not schedule_items:
+            return False
+
+        lines = [
+            "🌙 <b>Ace775 Daily Operations Briefing</b>",
+            f"📅 <i>{date_str}</i>",
+            "",
+            f"🎯 <b>Active Accounts Scheduled:</b> {len(schedule_items)}",
+            "🕒 <b>Today's Randomized Task Timeline:</b>"
+        ]
+
+        sorted_items = sorted(schedule_items, key=lambda x: x.get("scheduled_time", ""))
+        for item in sorted_items:
+            sched_time = item.get("scheduled_time", "")
+            time_display = sched_time[11:16] if len(sched_time) >= 16 else sched_time
+            label = item.get("label") or item.get("phone", "Account")
+            phone = item.get("phone", "")
+            lines.append(f"  • <b>{time_display}</b> — {label} (<code>{phone}</code>)")
+
+        lines.extend([
+            "",
+            "ℹ️ <b>Operating Schedule:</b>",
+            "• <b>Tasks:</b> Mon - Sat (24h anytime, Sunday rest day)",
+            "• <b>Withdrawals:</b> Mon - Fri (09:00 - 17:00 strictly)",
+            "",
+            "🤖 <i>Automated pattern-free execution active. Type /schedule in chat for live progress.</i>"
+        ])
+        return self.send_message("\n".join(lines))
+
+    def send_daily_financial_digest(self, summary: Dict[str, Any]) -> bool:
+        """Sends daily 18:00 financial report after the withdrawal window closes."""
+        if not self.is_configured:
+            return False
+
+        date_str = summary.get("date_str", datetime.now().strftime("%A, %b %d, %Y"))
+        lines = [
+            "📊 <b>Ace775 Daily Financial Digest</b>",
+            f"📅 <i>{date_str} (Window Closed: 17:00 GMT)</i>",
+            "",
+            "💰 <b>Today's Operations Summary:</b>",
+            f"  • Tasks Completed Today: <b>{summary.get('tasks_completed_today', 0)}</b>",
+            f"  • Task Revenue Generated: <b>+{summary.get('total_earned_today', 0.0):.2f} GHS</b>",
+            "",
+            "🏦 <b>Portfolio Balances:</b>",
+            f"  • Combined Wallet Total: <b>{summary.get('total_portfolio_balance', 0.0):.2f} GHS</b>",
+            f"  • Income Wallet Total: <b>{summary.get('total_income_balance', 0.0):.2f} GHS</b>",
+            f"  • Personal Wallet Total: <b>{summary.get('total_personal_balance', 0.0):.2f} GHS</b>",
+            "",
+            "💸 <b>Withdrawal Pipeline (Today):</b>",
+            f"  • Completed Today: <b>{summary.get('withdrawals_completed_count', 0)}</b> ({summary.get('withdrawals_completed_amount', 0.0):.2f} GHS)",
+            f"  • Queued / Pending: <b>{summary.get('withdrawals_queued_count', 0)}</b> ({summary.get('withdrawals_queued_amount', 0.0):.2f} GHS)",
+        ]
+
+        account_breakdown = summary.get("accounts", [])
+        if account_breakdown:
+            lines.extend(["", "👥 <b>Account Breakdown:</b>"])
+            for acc in account_breakdown:
+                vip = acc.get("vip_level", "N/A")
+                bal = acc.get("balance", "0.00")
+                inc = acc.get("income_balance", 0.0)
+                tasks = acc.get("tasks_done_today", 0)
+                earned = acc.get("earned_today", 0.0)
+                label = acc.get("label") or acc.get("phone", "Account")
+                lines.append(f"  • <b>{label}</b> (VIP {vip}): {bal} GHS | Inc: {inc:.2f} GHS | Tasks: {tasks} (+{earned:.2f} GHS)")
+
+        lines.extend([
+            "",
+            "✅ <i>Daily financial cycle concluded. Next task cycle begins at 12:00 AM midnight.</i>"
+        ])
+        return self.send_message("\n".join(lines))
+
+    def send_account_health_alert(self, account_label: str, phone: str, reason: str, details: str = "") -> bool:
+        """Dispatches high-priority alert when an account encounters auth/security/suspension issues."""
+        if not self.is_configured:
+            return False
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        lines = [
+            "🚨 <b>CRITICAL: Ace775 Account Health Alert</b>",
+            f"📅 <i>{now}</i>",
+            "",
+            f"👤 <b>Account:</b> {account_label} (<code>{phone}</code>)",
+            f"⚠️ <b>Issue:</b> <b>{reason}</b>"
+        ]
+        if details:
+            lines.append(f"ℹ️ <b>Details:</b> <code>{details}</code>")
+        lines.extend([
+            "",
+            "🔒 <b>Action Required:</b>",
+            "Please verify login credentials, password, or security status in your web dashboard.",
+            "Automation for this account will halt or retry safely to protect account integrity."
+        ])
+        return self.send_message("\n".join(lines))
+
+
 
 # Common mobile devices used in Ghana (Tecno, Infinix, Samsung, iPhone)
 MOBILE_USER_AGENTS = [
@@ -550,6 +646,10 @@ class AceApiBot:
         if not incomplete_tasks:
             logger.info(f"[API] All {ongoing_total} daily tasks are already completed! Great job.")
             return True
+
+        # Anti-fingerprinting: Shuffle tasks order so execution sequence is never identical or predictable
+        random.shuffle(incomplete_tasks)
+        logger.info(f"[API] Shuffled {len(incomplete_tasks)} task(s) into randomized execution order.")
 
         if max_tasks and max_tasks > 0:
             logger.info(f"[API] Limit set to {max_tasks} task(s) for this run.")

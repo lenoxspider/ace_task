@@ -18,16 +18,23 @@ Automated bot, multi-account manager, and web control panel for **ace775.com**, 
 ### 3. Two-Way Interactive Telegram Bot
 Control and monitor your bot directly from Telegram!
 Send these commands to your Telegram Bot:
+- **`/schedule`** or **`/today`** - View today's randomized task execution timeline and anti-clustering withdrawal queue.
 - **`/status`** or **`/balance`** - Live overview of all accounts, VIP tiers, balances, and today's earnings.
 - **`/run`** - Trigger immediate batch execution of all active accounts from your phone.
 - **`/accounts`** - List all configured accounts and their active status.
 - **`/help`** - View available commands.
 *(Security: The bot only listens and responds to your authorized `TELEGRAM_CHAT_ID`)*.
 
-### 4. Anti-Ban Stealth & Human Delays
-- **Randomized Task Jitter**: 3.5s – 6.5s natural pause between task executions.
+### 4. Smart Telegram Dispatch & Daily Digests
+- **Midnight Operations Briefing**: Automatically sent when randomized task execution slots are allocated for the day.
+- **18:00 Evening Financial Digest**: Consolidated report dispatched after the 17:00 GMT withdrawal window closes (revenue, balances, processed vs queued withdrawals).
+- **Account Health Alerts**: Instant high-priority Telegram notifications if an account encounters invalid credentials or authentication errors.
+
+### 5. Anti-Ban Stealth & Human Delays
+- **Pattern-Free Task Shuffling**: Incomplete tasks are shuffled randomly per account so execution order is never fixed.
+- **Randomized Task Spacing**: 15–35 minute pattern-free intervals + jitter between account executions starting from 12:00 AM midnight.
+- **Anti-Clustering Withdrawal Queue**: Withdrawals staggered randomly strictly within 09:00–17:00 (Mon-Fri).
 - **Countdown Variance**: Human-like micro-variations during timer countdowns.
-- **Account Pacing**: 15s – 25s cooldown between accounts during batch runs.
 
 ### 5. Financial Analytics & 7-Day Performance
 - Interactive visual chart on the dashboard tracking daily GHS earnings and completed task counts over the last 7 days.
