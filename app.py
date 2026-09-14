@@ -370,6 +370,7 @@ def run_all_enabled_accounts():
 
 # Connect callbacks to Scheduler and Telegram Listener
 scheduler.run_all_callback = run_all_enabled_accounts
+scheduler.run_single_callback = run_single_account
 scheduler.broadcast_callback = broadcast_log
 telegram_bot.run_all_callback = run_all_enabled_accounts
 
@@ -434,6 +435,9 @@ class SettingsUpdate(BaseModel):
     retry_interval_minutes: Optional[str] = None
     min_withdrawal_spacing_minutes: Optional[str] = None
     max_withdrawal_spacing_minutes: Optional[str] = None
+    midnight_scheduler_enabled: Optional[str] = None
+    min_task_spacing_minutes: Optional[str] = None
+    max_task_spacing_minutes: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -1204,7 +1208,10 @@ def get_settings_api():
         "auto_retry_outside_hours": db.get_setting("auto_retry_outside_hours", "1"),
         "retry_interval_minutes": db.get_setting("retry_interval_minutes", "30"),
         "min_withdrawal_spacing_minutes": db.get_setting("min_withdrawal_spacing_minutes", "25"),
-        "max_withdrawal_spacing_minutes": db.get_setting("max_withdrawal_spacing_minutes", "50")
+        "max_withdrawal_spacing_minutes": db.get_setting("max_withdrawal_spacing_minutes", "50"),
+        "midnight_scheduler_enabled": db.get_setting("midnight_scheduler_enabled", "1"),
+        "min_task_spacing_minutes": db.get_setting("min_task_spacing_minutes", "15"),
+        "max_task_spacing_minutes": db.get_setting("max_task_spacing_minutes", "35")
     }
 
 
@@ -1230,6 +1237,12 @@ def update_settings_api(data: SettingsUpdate):
         db.set_setting("min_withdrawal_spacing_minutes", data.min_withdrawal_spacing_minutes.strip())
     if data.max_withdrawal_spacing_minutes is not None:
         db.set_setting("max_withdrawal_spacing_minutes", data.max_withdrawal_spacing_minutes.strip())
+    if data.midnight_scheduler_enabled is not None:
+        db.set_setting("midnight_scheduler_enabled", data.midnight_scheduler_enabled.strip())
+    if data.min_task_spacing_minutes is not None:
+        db.set_setting("min_task_spacing_minutes", data.min_task_spacing_minutes.strip())
+    if data.max_task_spacing_minutes is not None:
+        db.set_setting("max_task_spacing_minutes", data.max_task_spacing_minutes.strip())
 
     # Dynamically reload Telegram Listener (#3)
     if data.telegram_token is not None or data.telegram_chat_id is not None:

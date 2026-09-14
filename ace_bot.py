@@ -516,28 +516,46 @@ class AceApiBot:
             self.stats["error"] = "Sunday: Platform tasks suspended (Rest day)"
             return True
 
-        logger.info("[API] Fetching daily task list...")
-        res = self._get("/api/Task/index", {"page_no": 0, "type": 7, "status_flag": 0})
-        if not isinstance(res, dict):
-            logger.error("[API] Failed to fetch task list.")
-            return False
+        logger.info("[API] Fetching complete daily task inventory...")
+        all_task_list = []
+        seen_ids = set()
+        page_no = 0
+        while True:
+            res = self._get("/api/Task/index", {"page_no": page_no, "type": 7, "status_flag": 0})
+            if not isinstance(res, dict):
+                break
+            data = res.get("data", res)
+            if not isinstance(data, dict):
+                break
+            batch = data.get("list", [])
+            if not batch:
+                break
+            new_in_batch = 0
+            for t in batch:
+                tid = t.get("id")
+                if tid not in seen_ids:
+                    seen_ids.add(tid)
+                    all_task_list.append(t)
+                    new_in_batch += 1
+            if new_in_batch == 0:
+                break
+            page_no += 1
+            if page_no > 10:  # Safety cap
+                break
 
-        data = res.get("data", res)
-        task_list = data.get("list", []) if isinstance(data, dict) else []
-        ongoing_total = data.get("ongoing_total", len(task_list)) if isinstance(data, dict) else len(task_list)
+        ongoing_total = len(all_task_list)
+        logger.info(f"[API] Total tasks discovered on account: {ongoing_total}")
 
-        logger.info(f"[API] Total tasks found: {len(task_list)} (Ongoing: {ongoing_total})")
-
-        incomplete_tasks = [t for t in task_list if not t.get("is_complate")]
+        incomplete_tasks = [t for t in all_task_list if not t.get("is_complate")]
         if not incomplete_tasks:
-            logger.info("[API] All daily tasks are already completed! Great job.")
+            logger.info(f"[API] All {ongoing_total} daily tasks are already completed! Great job.")
             return True
 
         if max_tasks and max_tasks > 0:
             logger.info(f"[API] Limit set to {max_tasks} task(s) for this run.")
             incomplete_tasks = incomplete_tasks[:max_tasks]
 
-        logger.info(f"[API] Tasks to execute in this run: {len(incomplete_tasks)}")
+        logger.info(f"[API] Tasks to execute in this run: {len(incomplete_tasks)} (Remaining incomplete: {len(incomplete_tasks)}/{ongoing_total})")
         for idx, task in enumerate(incomplete_tasks, 1):
             task_id = task.get("id")
             title = task.get("title", f"Task #{task_id}")
@@ -593,7 +611,32 @@ class AceApiBot:
             logger.info(f"[API] Human cooldown: pausing {cooldown:.1f}s before next task...")
             time.sleep(cooldown)
 
-        logger.info(f"[API] Finished processing tasks.")
+        logger.info(f"[API] Finished processing {len(incomplete_tasks)} task(s).")
+
+        # Double-check verification sweep: ensure 100% completion of any newly unlocked daily tasks
+        if not (max_tasks and max_tasks > 0):
+            sweep_res = self._get("/api/Task/index", {"page_no": 0, "type": 7, "status_flag": 0})
+            if isinstance(sweep_res, dict):
+                sdata = sweep_res.get("data", sweep_res)
+                if isinstance(sdata, dict):
+                    still_incomplete = [t for t in sdata.get("list", []) if not t.get("is_complate")]
+                    if still_incomplete:
+                        logger.info(f"[API] Final sweep: found {len(still_incomplete)} remaining task(s). Completing now...")
+                        for r_idx, r_task in enumerate(still_incomplete, 1):
+                            r_id = r_task.get("id")
+                            r_title = r_task.get("title", f"Task #{r_id}")
+                            r_amount = r_task.get("amount", "0")
+                            time.sleep(random.uniform(2.0, 3.5))
+                            comp_r = self._post("/api/Task/completeTask", {"task_id": r_id})
+                            if isinstance(comp_r, dict) and comp_r.get("code") == 1:
+                                self.stats["tasks"].append({"title": r_title, "amount": str(r_amount)})
+                                try:
+                                    self.stats["total_earned"] += float(r_amount)
+                                except ValueError:
+                                    pass
+                                logger.info(f"[API] Sweep Task '{r_title}' finished successfully!")
+
+        logger.info(f"[API] All daily tasks completed.")
         self.fetch_user_info()
         return True
 

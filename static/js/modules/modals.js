@@ -891,6 +891,13 @@ export async function loadSettings() {
     if (minSpacing) minSpacing.value = data.min_withdrawal_spacing_minutes || "25";
     const maxSpacing = document.getElementById("set-max-spacing");
     if (maxSpacing) maxSpacing.value = data.max_withdrawal_spacing_minutes || "50";
+
+    const midEnabled = document.getElementById("set-midnight-enabled");
+    if (midEnabled) midEnabled.checked = data.midnight_scheduler_enabled !== "0";
+    const minTaskSpacing = document.getElementById("set-min-task-spacing");
+    if (minTaskSpacing) minTaskSpacing.value = data.min_task_spacing_minutes || "15";
+    const maxTaskSpacing = document.getElementById("set-max-task-spacing");
+    if (maxTaskSpacing) maxTaskSpacing.value = data.max_task_spacing_minutes || "35";
   } catch (err) {
     console.error("Failed to load settings:", err);
   }
@@ -900,6 +907,9 @@ export async function handleSettingsSubmit(e) {
   e.preventDefault();
   const minSpacing = document.getElementById("set-min-spacing");
   const maxSpacing = document.getElementById("set-max-spacing");
+  const midEnabled = document.getElementById("set-midnight-enabled");
+  const minTaskSpacing = document.getElementById("set-min-task-spacing");
+  const maxTaskSpacing = document.getElementById("set-max-task-spacing");
 
   const payload = {
     base_url: document.getElementById("set-base-url").value.trim(),
@@ -911,7 +921,10 @@ export async function handleSettingsSubmit(e) {
     schedule_enabled: document.getElementById("set-sched-enabled").checked ? "1" : "0",
     auto_retry_outside_hours: document.getElementById("set-auto-retry").checked ? "1" : "0",
     min_withdrawal_spacing_minutes: minSpacing ? minSpacing.value.trim() : "25",
-    max_withdrawal_spacing_minutes: maxSpacing ? maxSpacing.value.trim() : "50"
+    max_withdrawal_spacing_minutes: maxSpacing ? maxSpacing.value.trim() : "50",
+    midnight_scheduler_enabled: midEnabled && midEnabled.checked ? "1" : "0",
+    min_task_spacing_minutes: minTaskSpacing ? minTaskSpacing.value.trim() : "15",
+    max_task_spacing_minutes: maxTaskSpacing ? maxTaskSpacing.value.trim() : "35"
   };
 
   try {
