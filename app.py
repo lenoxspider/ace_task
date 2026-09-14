@@ -720,6 +720,9 @@ def refresh_account_balance_api(account_id: int):
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
+    if account.get("password", "").startswith("enc:"):
+        raise HTTPException(status_code=400, detail="Refresh failed: Could not decrypt account password. Master dashboard password may have changed.")
+
     base_url = db.get_setting("base_url", "https://ace775.com")
     bot = AceApiBot(base_url=base_url, phone=account["phone"], password=account["password"])
     if not bot.login():

@@ -177,7 +177,7 @@ class AceApiBot:
             "User-Agent": ua,
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.9,en-GH;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Encoding": "gzip, deflate",
             "Content-Type": "application/json;charset=UTF-8",
             "Referer": f"{self.base_url}/",
             "Origin": self.base_url,
@@ -213,8 +213,8 @@ class AceApiBot:
                     time.sleep(1.5 * attempt)
                 else:
                     logger.error(f"POST {path} failed after 3 attempts: {e}")
-                    return {}
-        return {}
+                    return {"_error": str(e)}
+        return {"_error": "Request failed"}
 
     def _get(self, path: str, params: Optional[dict] = None) -> dict:
         url = f"{self.base_url}{path}"
@@ -228,16 +228,25 @@ class AceApiBot:
                     time.sleep(1.5 * attempt)
                 else:
                     logger.error(f"GET {path} failed after 3 attempts: {e}")
-                    return {}
-        return {}
+                    return {"_error": str(e)}
+        return {"_error": "Request failed"}
 
     def login(self) -> bool:
-        clean = self.phone.strip()
+        raw = self.phone.strip()
+        if raw.startswith("+233"):
+            clean = raw[4:]
+        elif raw.startswith("233"):
+            clean = raw[3:]
+        elif raw.startswith("0") and len(raw) == 10:
+            clean = raw[1:]
+        else:
+            clean = raw
+
         candidates = [clean]
         if len(clean) == 9 and not clean.startswith("0"):
             candidates.append(f"0{clean}")
-        elif len(clean) == 10 and clean.startswith("0"):
-            candidates.append(clean[1:])
+        elif clean != raw:
+            candidates.append(raw)
 
         device_fp = get_account_device_fingerprint(clean)
         login_idx = f"H5{device_fp}"
@@ -271,7 +280,12 @@ class AceApiBot:
                 self.fetch_user_info()
                 return True
             else:
-                last_msg = res.get("msg", "Unknown error or invalid credentials") if isinstance(res, dict) else "No response"
+                if isinstance(res, dict) and "_error" in res:
+                    last_msg = f"Network error ({res['_error']})"
+                elif isinstance(res, dict) and res.get("msg"):
+                    last_msg = res["msg"]
+                else:
+                    last_msg = "Unknown error or invalid credentials"
                 logger.warning(f"[API] Login attempt with '{phone_candidate}' failed: {last_msg}")
 
         logger.error(f"[API] Login failed: {last_msg}")
@@ -553,6 +567,13 @@ class AceApiBot:
             time.sleep(react_delay)
 
             comp_res = self._post("/api/Task/completeTask", {"task_id": task_id})
+            msg = comp_res.get("msg", "") if isinstance(comp_res, dict) else ""
+            if "login" in msg.lower() or "token" in msg.lower():
+                logger.info(f"[API] Session expired ({msg}). Re-authenticating...")
+                if self.login():
+                    comp_res = self._post("/api/Task/completeTask", {"task_id": task_id})
+                    msg = comp_res.get("msg", "") if isinstance(comp_res, dict) else ""
+
             if isinstance(comp_res, dict) and comp_res.get("code") == 1:
                 logger.info(f"[API] Task '{title}' completed successfully! Reward added.")
                 self.stats["tasks"].append({"title": title, "amount": str(amount)})
@@ -561,7 +582,6 @@ class AceApiBot:
                 except ValueError:
                     pass
             else:
-                msg = comp_res.get("msg", "Unknown response")
                 logger.warning(f"[API] Task completion response: {msg}")
                 if "working hours" in msg.lower() or "forbid" in msg.lower() or "sunday" in msg.lower():
                     logger.warning(f"[API] Halting task execution: Server indicates '{msg}'")
@@ -645,7 +665,14 @@ class AceApiBot:
 class AcePlaywrightBot:
     def __init__(self, base_url: str, phone: str, password: str, headless: bool = True):
         self.base_url = base_url.rstrip("/")
-        self.phone = phone
+        clean_phone = phone.strip()
+        if clean_phone.startswith("+233"):
+            clean_phone = clean_phone[4:]
+        elif clean_phone.startswith("233"):
+            clean_phone = clean_phone[3:]
+        elif clean_phone.startswith("0") and len(clean_phone) == 10:
+            clean_phone = clean_phone[1:]
+        self.phone = clean_phone
         self.password = password
         self.headless = headless
         self.stats: Dict[str, Any] = {
@@ -823,7 +850,7 @@ class AcePlaywrightBot:
                             countdown_elem = page.locator(".btnWarp button, .detailsWarp .btnWarp").first
 
                             max_wait = 30
-                            while max_wait > 0 and page.url.endswith("tDetails"):
+                            while max_wait > 0 and "tDetails" in page.url:
                                 btn_txt = countdown_elem.inner_text().strip() if countdown_elem.is_visible() else ""
                                 if "Completed" in btn_txt or "已完成" in btn_txt:
                                     logger.info("[Browser] Task completed!")
@@ -837,17 +864,23 @@ class AcePlaywrightBot:
                                 time.sleep(1)
                                 max_wait -= 1
 
-                            rate_popup = page.locator(".rateWarp, .van-popup:has(.van-rate)")
-                            if rate_popup.is_visible():
-                                logger.info("[Browser] 5-Star rating popup appeared. Rating 5 stars...")
-                                stars = page.locator(".van-rate__item")
-                                if stars.count() >= 5:
-                                    stars.nth(4).click()
-                                    page.wait_for_timeout(500)
-                                confirm_btn = page.locator(".rateWarp button:has-text('Confirm'), .rateWarp button:has-text('确认')").first
-                                if confirm_btn.is_visible():
-                                    confirm_btn.click()
-                                    page.wait_for_timeout(1000)
+                            # Handle 5-Star rating popup
+                            try:
+                                rate_popup = page.locator(".rateWarp, .van-popup:has(.van-rate), .van-popup, .van-dialog")
+                                for p_elem in rate_popup.all():
+                                    if p_elem.is_visible():
+                                        logger.info("[Browser] Evaluation/rating popup detected.")
+                                        stars = p_elem.locator(".van-rate__item")
+                                        if stars.count() >= 5:
+                                            stars.nth(4).click()
+                                            page.wait_for_timeout(400)
+                                        confirm_btn = p_elem.locator("button:has-text('Confirm'), button:has-text('确认')").first
+                                        if confirm_btn.is_visible():
+                                            confirm_btn.click()
+                                            page.wait_for_timeout(1000)
+                                        break
+                            except Exception as re:
+                                logger.warning(f"[Browser] Notice while handling rating popup: {re}")
 
                             page.wait_for_timeout(2000)
 
