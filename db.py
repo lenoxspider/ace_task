@@ -90,8 +90,17 @@ def decrypt_password(cipher_text: str) -> str:
 
 def get_connection() -> sqlite3.Connection:
     os.makedirs(DB_DIR, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    # Several worker threads (dashboard, scheduler, Telegram) write to this file, so give
+    # SQLite a real lock timeout and let readers proceed during a write (WAL) instead of
+    # raising 'database is locked'.
+    conn = sqlite3.connect(DB_PATH, timeout=5.0)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except sqlite3.Error:
+        pass
     return conn
 
 
@@ -307,7 +316,6 @@ def check_and_reset_daily_stats():
 
 
 def get_accounts(mask_passwords: bool = True) -> List[Dict[str, Any]]:
-    check_and_reset_daily_stats()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM accounts ORDER BY id ASC")
@@ -611,15 +619,17 @@ def _today_totals(cursor) -> Dict[str, float]:
     """Today's profit/tasks across active accounts - the single source of truth.
 
     The dashboard card, the per-account cards and the 7-day chart all read today from
-    here, so they can no longer disagree with each other.
+    here, so they can no longer disagree with each other. Only accounts that have been
+    touched today are counted, so a stale counter from a previous day can never leak
+    into today's figure (this replaces the old write-on-every-read reset).
     """
     cursor.execute("""
         SELECT
             COALESCE(SUM(tasks_done_today), 0) as tasks,
             COALESCE(SUM(earned_today), 0.0) as earned
         FROM accounts
-        WHERE enabled = 1
-    """)
+        WHERE enabled = 1 AND SUBSTR(COALESCE(last_run_time, ''), 1, 10) = ?
+    """, (_utc_today_str(),))
     row = cursor.fetchone()
     return {"tasks": int(row["tasks"] or 0), "earned": float(row["earned"] or 0.0)}
 
@@ -666,7 +676,6 @@ def get_last_7_days_analytics() -> List[Dict[str, Any]]:
 
 
 def get_dashboard_stats() -> Dict[str, Any]:
-    check_and_reset_daily_stats()
     conn = get_connection()
     cursor = conn.cursor()
 
