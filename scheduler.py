@@ -83,6 +83,9 @@ class SmartScheduler:
                     time.sleep(60)
                     continue
 
+                # 0. Ensure daily counters in database are reset for the new calendar day
+                db.check_and_reset_daily_stats()
+
                 # 1. Midnight Pattern-Free Task Allocation Engine (Monday - Saturday)
                 self._ensure_midnight_task_schedule(now, today_str)
 

@@ -249,7 +249,29 @@ def _parse_withdrawal_amounts(val: Any) -> List[float]:
     return list(DEFAULT_DENOMINATIONS)
 
 
+def check_and_reset_daily_stats():
+    """
+    Ensures accounts table daily counters (tasks_done_today, earned_today)
+    are reset to 0 for accounts whose last run was before today.
+    """
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE accounts
+            SET tasks_done_today = 0, earned_today = 0.0
+            WHERE last_run_time IS NULL 
+               OR last_run_time = '' 
+               OR SUBSTR(last_run_time, 1, 10) != ?
+        """, (today_str,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_accounts(mask_passwords: bool = True) -> List[Dict[str, Any]]:
+    check_and_reset_daily_stats()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM accounts ORDER BY id ASC")
@@ -446,10 +468,19 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
     cursor = conn.cursor()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    cursor.execute("SELECT tasks_done_today, earned_today, total_tasks_done, total_earned_ghs FROM accounts WHERE id = ?", (account_id,))
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    cursor.execute("SELECT tasks_done_today, earned_today, total_tasks_done, total_earned_ghs, last_run_time FROM accounts WHERE id = ?", (account_id,))
     current = cursor.fetchone()
-    curr_td_today = current["tasks_done_today"] if current and current["tasks_done_today"] is not None else 0
-    curr_earned_today = current["earned_today"] if current and current["earned_today"] is not None else 0.0
+    last_run = (current["last_run_time"] or "") if current else ""
+
+    # If last run was not today, start daily counters fresh from 0
+    if not last_run.startswith(today_str):
+        curr_td_today = 0
+        curr_earned_today = 0.0
+    else:
+        curr_td_today = current["tasks_done_today"] if current and current["tasks_done_today"] is not None else 0
+        curr_earned_today = current["earned_today"] if current and current["earned_today"] is not None else 0.0
+
     curr_total_tasks = current["total_tasks_done"] if current and current["total_tasks_done"] is not None else 0
     curr_total_earned = current["total_earned_ghs"] if current and current["total_earned_ghs"] is not None else 0.0
 
@@ -587,6 +618,7 @@ def get_last_7_days_analytics() -> List[Dict[str, Any]]:
 
 
 def get_dashboard_stats() -> Dict[str, Any]:
+    check_and_reset_daily_stats()
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
