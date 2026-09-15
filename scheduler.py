@@ -219,7 +219,7 @@ class SmartScheduler:
                     self.last_scheduled_slot_1 = today_str
                     self.retry_at = None
                     if self.run_all_callback:
-                        threading.Thread(target=self._run_with_retry_watch, daemon=True).start()
+                        threading.Thread(target=self._run_batch_and_watch, daemon=True).start()
 
                 elif not midnight_enabled and enabled and sched_time_2 and now_time_str == sched_time_2 and self.last_scheduled_slot_2 != today_str:
                     logger.info(f"⏰ Auto-Scheduler: Triggering legacy fixed batch run (Slot 2) at {now_time_str}...")
@@ -230,10 +230,8 @@ class SmartScheduler:
 
                 # 5. Check for pending auto-retry
                 elif self.retry_at and now >= self.retry_at and auto_retry:
-                    logger.info(f"⏰ Auto-Scheduler: Executing queued retry after 'Outside working hours'...")
                     self.retry_at = None
-                    if self.run_all_callback:
-                        threading.Thread(target=self._run_with_retry_watch, daemon=True).start()
+                    threading.Thread(target=self._retry_affected_accounts, daemon=True).start()
 
                 # 6. Anti-clustering Withdrawal Queue Worker (Strictly 09:00 - 17:00, Mon-Fri)
                 self._check_withdrawal_queue()
@@ -246,7 +244,7 @@ class SmartScheduler:
 
             time.sleep(30)
 
-    def _run_with_retry_watch(self):
+    def _run_batch_and_watch(self):
         if not self.run_all_callback:
             return
         if db.utc_now().weekday() == 6:
@@ -268,6 +266,63 @@ class SmartScheduler:
             logger.info(f"⏰ Outside working hours detected. Auto-retry scheduled at {retry_str} (in {retry_interval}m).")
         else:
             self.retry_at = None
+
+    def _retry_affected_accounts(self):
+        """Retry ONLY the accounts that hit a closed-window response.
+
+        The old behaviour called run_all_callback(), which ignored the per-account windows
+        and re-ran the entire batch the moment a retry fell due.
+        """
+        now = db.utc_now()
+        if now.weekday() == 6:
+            logger.info("Auto-Scheduler: Sunday rest day, no retry.")
+            self.retry_at = None
+            return
+
+        auto_retry = db.get_setting("auto_retry_outside_hours", "1") == "1"
+        retry_interval = int(db.get_setting("retry_interval_minutes", "30"))
+        cutoff = db.hhmm_to_min(db.get_setting("late_run_cutoff", "23:00")) or 23 * 60
+        if now.hour * 60 + now.minute >= cutoff:
+            logger.info("Auto-Scheduler: past the %s cutoff, no retry today." % db.min_to_hhmm(cutoff))
+            self.retry_at = None
+            return
+
+        markers = ("working hours", "closed", "forbid", "not open")
+        def blocked(account):
+            status = (account.get("last_status") or "").lower()
+            return account.get("enabled", 1) and any(m in status for m in markers)
+
+        affected = [a for a in db.get_accounts() if blocked(a)]
+        if not affected:
+            self.retry_at = None
+            return
+
+        labels = ", ".join("'%s'" % (a.get("label") or a["phone"]) for a in affected)
+        msg = ("Auto-Scheduler: retrying %d account(s) that hit a closed-window response: %s"
+               % (len(affected), labels))
+        logger.info(msg)
+        if self.broadcast_callback:
+            self.broadcast_callback(msg, "info")
+
+        gap_min = max(1, int(db.get_setting("min_task_spacing_minutes", "15") or "15"))
+        gap_max = max(gap_min, int(db.get_setting("max_task_spacing_minutes", "35") or "35"))
+        for idx, account in enumerate(affected):
+            try:
+                if self.run_single_callback:
+                    self.run_single_callback(account["id"])
+            except Exception as exc:
+                logger.error("Retry failed for account #%s: %s" % (account["id"], exc))
+            if idx < len(affected) - 1:
+                time.sleep(random.randint(gap_min, gap_max) * 60)
+
+        still = [a for a in db.get_accounts() if blocked(a)]
+        if still and auto_retry:
+            self.retry_at = db.utc_now() + timedelta(minutes=retry_interval)
+            logger.info("Auto-Scheduler: %d account(s) still blocked, next retry at %s."
+                        % (len(still), self.retry_at.strftime("%H:%M:%S")))
+        else:
+            self.retry_at = None
+            logger.info("Auto-Scheduler: retry complete, no accounts still blocked.")
 
     def _ensure_midnight_task_schedule(self, now: datetime, today_str: str):
         """

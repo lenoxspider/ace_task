@@ -137,6 +137,7 @@
     accounts: [],
     runningIds: {},
     preview: false,
+    offline: false,
     page: document.body.dataset.page || "overview"
   };
   function setAccounts(list) { state.accounts = Array.isArray(list) ? list : []; }
@@ -183,19 +184,67 @@
       return res.json().catch(function () { return {}; }).then(function (data) {
         if (!res.ok) {
           var msg = (data && (data.detail || data.message)) || ("HTTP " + res.status);
-          throw new Error(msg);
+          var httpErr = new Error(msg);
+          httpErr.status = res.status;      // relied on by safe() to spot a missing endpoint
+          throw httpErr;
         }
         return data;
       });
     });
   }
 
-  // Safe JSON: falls back to demo data in preview mode / when the server is unreachable.
+  // Empty payloads used when the server cannot be reached. A real deployment must NEVER
+  // show invented accounts or balances, so an outage surfaces as an obvious error plus
+  // empty data - never as convincing-looking sample numbers.
+  var EMPTY = {
+    accounts: [],
+    history: [],
+    analytics: [],
+    plan: { windows: [], problems: [], skipped: [] },
+    queue: { queue: [] },
+    stats: {},
+    scheduled: null,
+    settings: {},
+    version: {},
+    withdrawalOptions: {}
+  };
+
+  function emptyFor(key) {
+    return EMPTY[key] !== undefined ? EMPTY[key] : [];
+  }
+
+  function offlineError(message) {
+    state.offline = true;
+    try {
+      var bar = qs("#offline-strip");
+      if (!bar) {
+        bar = document.createElement("div");
+        bar.id = "offline-strip";
+        bar.setAttribute("role", "alert");
+        bar.style.cssText = "position:sticky;top:0;z-index:9999;background:#7f1d1d;color:#fff;" +
+          "padding:8px 14px;font:600 13px/1.45 var(--font-mono, monospace);text-align:center;";
+        bar.innerHTML = "<span data-offline-text></span>";
+        var host = document.body || document.documentElement;
+        host.insertBefore(bar, host.firstChild);
+      }
+      var t = bar.querySelector("[data-offline-text]");
+      if (t) t.textContent = message + " Showing empty values - this is NOT live data.";
+    } catch (e) { /* the banner must never break the page */ }
+  }
+
   function safe(path, demoKey, opts) {
     return json(path, opts).catch(function (err) {
+      // Sample data is only for explicit preview mode (file:// or ?preview=1).
       if (err && err.preview) { enablePreview(); return demo(demoKey || path); }
-      if (err && err.name === "TypeError") { enablePreview("Can't reach the app server — showing sample data."); return demo(demoKey || path); }
-      if (err && /HTTP (404|405|501)/.test(String(err.message))) { enablePreview("This page is running outside the app server — showing sample data."); return demo(demoKey || path); }
+      var unreachable = err && err.name === "TypeError";
+      var missing = err && (err.status === 404 || err.status === 405 || err.status === 501
+        || /HTTP (404|405|501)/.test(String(err.message)));
+      if (unreachable || missing) {
+        offlineError(unreachable
+          ? "Cannot reach the app server."
+          : "Endpoint unavailable (" + err.message + ") - the server may be running an older build.");
+        return emptyFor(demoKey || path);
+      }
       throw err;
     });
   }
