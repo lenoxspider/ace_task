@@ -20,6 +20,10 @@ export function openAccountModal(acc = null) {
   document.getElementById("form-label").value = acc ? acc.label : "";
   document.getElementById("form-mode").value = acc ? acc.mode : "api";
   document.getElementById("form-max-tasks").value = acc ? acc.max_tasks : 0;
+  const wsEl = document.getElementById("form-window-start");
+  const weEl = document.getElementById("form-window-end");
+  if (wsEl) wsEl.value = acc ? (acc.window_start || "") : "";
+  if (weEl) weEl.value = acc ? (acc.window_end || "") : "";
   document.getElementById("form-enabled").checked = acc ? (acc.enabled === 1) : true;
 
   // Auto-Withdrawal fields
@@ -201,6 +205,8 @@ export async function handleAccountSubmit(e) {
     auto_withdraw: document.getElementById("form-auto-withdraw").checked ? 1 : 0,
     withdraw_amount: parseFloat(document.getElementById("form-withdraw-amount").value) || 0.0,
     withdraw_wallet: parseInt(document.getElementById("form-withdraw-wallet").value, 10) || 2,
+    window_start: (document.getElementById("form-window-start") || {}).value || "",
+    window_end: (document.getElementById("form-window-end") || {}).value || "",
     pay_password: payPassword
   };
 
@@ -957,6 +963,17 @@ export async function loadSettings() {
     const maxTaskSpacing = document.getElementById("set-max-task-spacing");
     if (maxTaskSpacing) maxTaskSpacing.value = data.max_task_spacing_minutes || "35";
 
+    const defWs = document.getElementById("set-default-window-start");
+    if (defWs) defWs.value = data.default_window_start || "04:00";
+    const defWe = document.getElementById("set-default-window-end");
+    if (defWe) defWe.value = data.default_window_end || "08:00";
+    const slotDur = document.getElementById("set-slot-duration");
+    if (slotDur) slotDur.value = data.slot_duration_minutes || "10";
+    const lateCut = document.getElementById("set-late-cutoff");
+    if (lateCut) lateCut.value = data.late_run_cutoff || "23:00";
+
+    loadWindowsPlan();
+
     loadSystemVersion();
   } catch (err) {
     console.error("Failed to load settings:", err);
@@ -998,7 +1015,12 @@ export async function handleSettingsSubmit(e) {
     max_withdrawal_spacing_minutes: maxSpacing ? maxSpacing.value.trim() : "50",
     midnight_scheduler_enabled: midEnabled && midEnabled.checked ? "1" : "0",
     min_task_spacing_minutes: minTaskSpacing ? minTaskSpacing.value.trim() : "15",
-    max_task_spacing_minutes: maxTaskSpacing ? maxTaskSpacing.value.trim() : "35"
+    max_task_spacing_minutes: maxTaskSpacing ? maxTaskSpacing.value.trim() : "35",
+    default_window_start: (document.getElementById("set-default-window-start") || {}).value || "04:00",
+    default_window_end: (document.getElementById("set-default-window-end") || {}).value || "08:00",
+    slot_duration_minutes: (document.getElementById("set-slot-duration") || {}).value || "10",
+    missed_window_policy: "late",
+    late_run_cutoff: (document.getElementById("set-late-cutoff") || {}).value || "23:00"
   };
 
   try {
@@ -1181,10 +1203,41 @@ export async function runSystemUpdate() {
   }
 }
 
+export async function loadWindowsPlan() {
+  const box = document.getElementById("windows-plan-body");
+  if (!box) return;
+  try {
+    const data = await api.getWindowsPlan();
+    let html = "";
+    (data.windows || []).forEach((w) => {
+      const colour = w.ok ? "var(--success,#3fb950)" : "var(--danger,#f85149)";
+      const rows = w.accounts.map((a) => {
+        const when = a.slot ? (a.late ? `${a.slot} (late)` : a.slot) : "not scheduled";
+        const src = a.window_source === "default" ? " - default window" : "";
+        return `<li>${a.label}: ${when}${src}</li>`;
+      }).join("");
+      html += `<div style="margin-bottom:10px;padding:9px;border-radius:8px;background:rgba(0,0,0,0.22);border:1px solid rgba(255,255,255,0.06);">
+        <div><strong>${w.window}</strong> &middot; ${w.count} account(s) &middot; capacity ${w.capacity} &middot;
+          <span style="color:${colour};font-weight:600;">${w.ok ? "OK" : "TOO TIGHT"}</span></div>
+        <ul style="margin:6px 0 0 16px;padding:0;">${rows}</ul>
+      </div>`;
+    });
+    const problems = (data.problems || []).map((p) => `<li>${p.message}</li>`).join("");
+    const skipped = (data.skipped || []).map((s) => `<li>${s.label} - ${s.reason}</li>`).join("");
+    if (problems) html += `<div style="color:var(--danger,#f85149);">Issues:<ul>${problems}</ul></div>`;
+    if (skipped) html += `<div style="color:var(--warning,#d29922);">Not scheduled today:<ul>${skipped}</ul></div>`;
+    html += `<div class="form-hint" style="margin-top:8px;">Spacing ${data.spacing_minutes} min &middot; assumed run ${data.slot_duration_minutes} min &middot; late runs until ${data.late_run_cutoff} (${data.missed_window_policy})</div>`;
+    box.innerHTML = html || "<em>No enabled accounts to schedule.</em>";
+  } catch (err) {
+    box.innerHTML = `<span style="color:var(--danger,#f85149);">${err.message}</span>`;
+  }
+}
+
 window.switchSettingsTab = switchSettingsTab;
 window.testTelegramConnection = testTelegramConnection;
 window.checkForUpdates = checkForUpdates;
 window.runSystemUpdate = runSystemUpdate;
 window.loadSystemVersion = loadSystemVersion;
+window.loadWindowsPlan = loadWindowsPlan;
 
 

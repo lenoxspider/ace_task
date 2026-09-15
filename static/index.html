@@ -629,6 +629,9 @@
             <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-platform" onclick="switchSettingsTab('tab-platform')">
               <span>🌐</span> Platform Host
             </button>
+            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-windows" onclick="switchSettingsTab('tab-windows')">
+              <span>w</span> Time Windows
+            </button>
             <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-system" onclick="switchSettingsTab('tab-system')">
               <span>v</span> System &amp; Updates
             </button>
@@ -761,6 +764,44 @@
               </div>
             </div>
 
+            <!-- Tab 7: Time Windows -->
+            <div class="settings-tab-panel" id="tab-windows" role="tabpanel">
+              <div class="settings-card">
+                <h4 class="settings-subhead">Task Windows (GMT)</h4>
+                <p class="settings-desc">Tasks may run Monday to Saturday at any hour, so these windows are a preference: each account runs inside its own window. Withdrawals stay fixed to Mon-Fri 09:00-17:00.</p>
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label for="set-default-window-start">Default Window Start</label>
+                    <input type="time" id="set-default-window-start" value="04:00">
+                    <span class="form-hint">Used by accounts with no window of their own.</span>
+                  </div>
+                  <div class="form-group flex-1">
+                    <label for="set-default-window-end">Default Window End</label>
+                    <input type="time" id="set-default-window-end" value="08:00">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label for="set-slot-duration">Assumed Run Duration (Minutes)</label>
+                    <input type="number" id="set-slot-duration" value="10" min="1" max="60">
+                    <span class="form-hint">Used for the capacity numbers below.</span>
+                  </div>
+                  <div class="form-group flex-1">
+                    <label for="set-late-cutoff">Run-Late Cutoff (GMT)</label>
+                    <input type="time" id="set-late-cutoff" value="23:00">
+                    <span class="form-hint">A missed window still runs before this time; after it, it waits for tomorrow.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <h4 class="settings-subhead">Today&rsquo;s Windows</h4>
+                <p class="settings-desc">Which accounts share a window, and whether the window has room for them.</p>
+                <div id="windows-plan-body">loading...</div>
+                <button type="button" class="btn btn-secondary" id="btn-refresh-plan" onclick="loadWindowsPlan()" style="margin-top:10px;">Refresh Plan</button>
+              </div>
+            </div>
+
             <!-- Tab 6: System & Updates -->
             <div class="settings-tab-panel" id="tab-system" role="tabpanel">
               <div class="settings-card">
@@ -871,6 +912,25 @@
                 <small>Active in automated daily rotation</small>
               </span>
             </label>
+          </div>
+        </div>
+
+        <!-- Card 2b: Task Window (GMT) -->
+        <div class="form-group-card">
+          <div class="form-group-card-header">
+            <span class="form-group-card-title">Task Window (GMT)</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="form-window-start">Window Start</label>
+              <input type="time" id="form-window-start">
+              <span class="form-hint">Blank = use the default window.</span>
+            </div>
+            <div class="form-group flex-1">
+              <label for="form-window-end">Window End</label>
+              <input type="time" id="form-window-end">
+              <span class="form-hint">The run must finish inside it.</span>
+            </div>
           </div>
         </div>
 

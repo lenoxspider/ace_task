@@ -216,6 +216,12 @@ export const api = {
     return data;
   },
 
+  getWindowsPlan: async () => {
+    const res = await request("/api/windows/plan");
+    if (!res.ok) throw new Error("Failed to load the window plan");
+    return res.json();
+  },
+
   logout: async () => {
     try {
       await request("/api/auth/logout", { method: "POST" });

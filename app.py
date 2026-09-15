@@ -23,7 +23,7 @@ import uvicorn
 
 import db
 from ace_bot import AceApiBot, AcePlaywrightBot, TelegramReporter
-from scheduler import scheduler
+from scheduler import scheduler, plan_task_slots
 from telegram_listener import telegram_bot
 
 # Configure logging
@@ -477,6 +477,8 @@ class AccountCreate(BaseModel):
     withdraw_amount: Optional[float] = 0.0
     pay_password: Optional[str] = ""
     withdraw_wallet: Optional[int] = 2
+    window_start: Optional[str] = ""
+    window_end: Optional[str] = ""
 
 
 class AccountUpdate(BaseModel):
@@ -490,6 +492,8 @@ class AccountUpdate(BaseModel):
     withdraw_amount: Optional[float] = None
     pay_password: Optional[str] = None
     withdraw_wallet: Optional[int] = None
+    window_start: Optional[str] = None
+    window_end: Optional[str] = None
 
 
 class WithdrawRequest(BaseModel):
@@ -513,6 +517,11 @@ class SettingsUpdate(BaseModel):
     midnight_scheduler_enabled: Optional[str] = None
     min_task_spacing_minutes: Optional[str] = None
     max_task_spacing_minutes: Optional[str] = None
+    default_window_start: Optional[str] = None
+    default_window_end: Optional[str] = None
+    slot_duration_minutes: Optional[str] = None
+    missed_window_policy: Optional[str] = None
+    late_run_cutoff: Optional[str] = None
 
 
 class TelegramTestRequest(BaseModel):
@@ -694,7 +703,9 @@ def create_account_api(item: AccountCreate):
             auto_withdraw=item.auto_withdraw or 0,
             withdraw_amount=item.withdraw_amount or 0.0,
             pay_password=item.pay_password or "",
-            withdraw_wallet=item.withdraw_wallet if item.withdraw_wallet is not None else 2
+            withdraw_wallet=item.withdraw_wallet if item.withdraw_wallet is not None else 2,
+            window_start=item.window_start or "",
+            window_end=item.window_end or ""
         )
         vip = bot.stats.get("grade", "VIP")
         try:
@@ -792,7 +803,9 @@ def update_account_api(account_id: int, item: AccountUpdate):
         auto_withdraw=item.auto_withdraw,
         withdraw_amount=item.withdraw_amount,
         pay_password=save_pay_pwd,
-        withdraw_wallet=item.withdraw_wallet
+        withdraw_wallet=item.withdraw_wallet,
+        window_start=item.window_start,
+        window_end=item.window_end
     )
     if not acc:
         raise HTTPException(status_code=404, detail="Account not found")
@@ -1398,6 +1411,65 @@ def system_update(item: SystemUpdateRequest):
         _update_lock.release()
 
 
+@app.get("/api/windows/plan")
+def get_windows_plan():
+    """Preview of today's window layout: which accounts share a window, capacity and issues."""
+    spacing = int(db.get_setting("min_task_spacing_minutes", "15") or "15")
+    duration = int(db.get_setting("slot_duration_minutes", "10") or "10")
+    cutoff = db.hhmm_to_min(db.get_setting("late_run_cutoff", "23:00")) or 23 * 60
+    policy = db.get_setting("missed_window_policy", "late")
+
+    entries = []
+    for account in db.get_accounts():
+        if not account.get("enabled", 1):
+            continue
+        start_min, end_min, source = db.resolve_window(account)
+        entries.append({
+            "id": account["id"],
+            "label": account.get("label") or account["phone"],
+            "phone": account["phone"],
+            "start": start_min,
+            "end": end_min,
+            "source": source,
+        })
+
+    now = db.utc_now()
+    plan = plan_task_slots(entries, now.hour * 60 + now.minute, spacing, duration, cutoff, policy)
+    slots = {s["account_id"]: s for s in plan["slots"]}
+
+    windows = {}
+    for entry in entries:
+        key = "%s - %s" % (db.min_to_hhmm(entry["start"]), db.min_to_hhmm(entry["end"]))
+        slot = slots.get(entry["id"])
+        windows.setdefault(key, {"window": key, "accounts": [], "capacity": 0,
+                                 "length_minutes": entry["end"] - entry["start"]})["accounts"].append({
+            "id": entry["id"],
+            "label": entry["label"],
+            "window_source": entry["source"],
+            "slot": db.min_to_hhmm(slot["start"]) if slot else None,
+            "late": bool(slot and slot["late"]),
+        })
+
+    out = []
+    for key in sorted(windows):
+        item = windows[key]
+        length = item["length_minutes"]
+        item["capacity"] = max(0, (length - duration) // spacing + 1) if length > duration else 0
+        item["count"] = len(item["accounts"])
+        item["ok"] = item["count"] <= item["capacity"]
+        out.append(item)
+
+    return {
+        "windows": out,
+        "problems": plan["problems"],
+        "skipped": plan["skipped"],
+        "spacing_minutes": spacing,
+        "slot_duration_minutes": duration,
+        "late_run_cutoff": db.min_to_hhmm(cutoff),
+        "missed_window_policy": policy,
+    }
+
+
 @app.get("/api/settings")
 def get_settings_api():
     return {
@@ -1413,7 +1485,12 @@ def get_settings_api():
         "max_withdrawal_spacing_minutes": db.get_setting("max_withdrawal_spacing_minutes", "50"),
         "midnight_scheduler_enabled": db.get_setting("midnight_scheduler_enabled", "1"),
         "min_task_spacing_minutes": db.get_setting("min_task_spacing_minutes", "15"),
-        "max_task_spacing_minutes": db.get_setting("max_task_spacing_minutes", "35")
+        "max_task_spacing_minutes": db.get_setting("max_task_spacing_minutes", "35"),
+        "default_window_start": db.get_setting("default_window_start", "04:00"),
+        "default_window_end": db.get_setting("default_window_end", "08:00"),
+        "slot_duration_minutes": db.get_setting("slot_duration_minutes", "10"),
+        "missed_window_policy": db.get_setting("missed_window_policy", "late"),
+        "late_run_cutoff": db.get_setting("late_run_cutoff", "23:00")
     }
 
 
@@ -1445,6 +1522,16 @@ def update_settings_api(data: SettingsUpdate):
         db.set_setting("min_task_spacing_minutes", data.min_task_spacing_minutes.strip())
     if data.max_task_spacing_minutes is not None:
         db.set_setting("max_task_spacing_minutes", data.max_task_spacing_minutes.strip())
+    if data.default_window_start is not None:
+        db.set_setting("default_window_start", data.default_window_start.strip())
+    if data.default_window_end is not None:
+        db.set_setting("default_window_end", data.default_window_end.strip())
+    if data.slot_duration_minutes is not None:
+        db.set_setting("slot_duration_minutes", data.slot_duration_minutes.strip())
+    if data.missed_window_policy is not None:
+        db.set_setting("missed_window_policy", data.missed_window_policy.strip())
+    if data.late_run_cutoff is not None:
+        db.set_setting("late_run_cutoff", data.late_run_cutoff.strip())
 
     # Dynamically reload Telegram Listener (#3)
     if data.telegram_token is not None or data.telegram_chat_id is not None:

@@ -186,6 +186,10 @@ def init_db():
         cursor.execute("ALTER TABLE accounts ADD COLUMN withdrawal_amounts TEXT DEFAULT ''")
     if "withdrawal_fee" not in columns:
         cursor.execute("ALTER TABLE accounts ADD COLUMN withdrawal_fee REAL DEFAULT 0.0")
+    if "window_start" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN window_start TEXT DEFAULT ''")
+    if "window_end" not in columns:
+        cursor.execute("ALTER TABLE accounts ADD COLUMN window_end TEXT DEFAULT ''")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
@@ -246,7 +250,14 @@ def init_db():
         "base_url": "https://ace775.com",
         "telegram_token": os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
         "telegram_chat_id": os.getenv("TELEGRAM_CHAT_ID", "").strip(),
-        "dashboard_password": os.getenv("DASHBOARD_PASSWORD", "admin123").strip()
+        "dashboard_password": os.getenv("DASHBOARD_PASSWORD", "admin123").strip(),
+        # Task scheduling. Tasks are allowed Mon-Sat at any hour, so these windows are a
+        # preference, not a platform limit. Withdrawals stay gated to Mon-Fri 09:00-17:00.
+        "default_window_start": "04:00",        # used by accounts with no window of their own
+        "default_window_end": "08:00",
+        "slot_duration_minutes": "10",          # assumed runtime, used for the capacity maths
+        "missed_window_policy": "late",         # run late the same day, before the cutoff
+        "late_run_cutoff": "23:00",
     }
     for k, v in defaults.items():
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, v))
@@ -292,6 +303,53 @@ def _parse_withdrawal_amounts(val: Any) -> List[float]:
                 pass
         return res if res else list(DEFAULT_DENOMINATIONS)
     return list(DEFAULT_DENOMINATIONS)
+
+
+
+# ==============================================================================
+# Time windows (per-account scheduling)
+# ==============================================================================
+def hhmm_to_min(value: Any) -> Optional[int]:
+    """'04:30' -> 270. Returns None if it is not a usable time."""
+    try:
+        parts = str(value).strip().split(":")
+        if len(parts) != 2:
+            return None
+        hours, minutes = int(parts[0]), int(parts[1])
+        if 0 <= hours <= 24 and 0 <= minutes < 60:
+            return min(24 * 60, hours * 60 + minutes)
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
+def min_to_hhmm(value: int) -> str:
+    """270 -> '04:30'."""
+    value = max(0, min(24 * 60, int(value)))
+    return "%02d:%02d" % (value // 60, value % 60)
+
+
+def _norm_window(value: Any) -> str:
+    """Normalise a window bound to 'HH:MM', or '' when it is not a usable time."""
+    minutes = hhmm_to_min(value)
+    return min_to_hhmm(minutes) if minutes is not None else ""
+
+
+def resolve_window(account: Dict[str, Any]) -> Tuple[int, int, str]:
+    """Effective (start_min, end_min, source) for an account.
+
+    An account's own window wins; accounts without one use the default window setting.
+    """
+    start = hhmm_to_min(account.get("window_start") or "")
+    end = hhmm_to_min(account.get("window_end") or "")
+    if start is not None and end is not None and end > start:
+        return start, end, "account"
+
+    d_start = hhmm_to_min(get_setting("default_window_start", "04:00")) or 4 * 60
+    d_end = hhmm_to_min(get_setting("default_window_end", "08:00")) or 8 * 60
+    if d_end <= d_start:
+        d_end = min(24 * 60, d_start + 60)
+    return d_start, d_end, "default"
 
 
 def check_and_reset_daily_stats():
@@ -353,7 +411,8 @@ def get_account(account_id: int, decrypt: bool = True) -> Optional[Dict[str, Any
 
 
 def add_account(phone: str, password: str, label: str = "", max_tasks: int = 0, mode: str = "api", enabled: int = 1,
-                auto_withdraw: int = 0, withdraw_amount: float = 0.0, pay_password: str = "", withdraw_wallet: int = 2) -> Dict[str, Any]:
+                auto_withdraw: int = 0, withdraw_amount: float = 0.0, pay_password: str = "", withdraw_wallet: int = 2,
+                window_start: str = "", window_end: str = "") -> Dict[str, Any]:
     clean_phone = normalize_phone(phone)
     now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     enc_pwd = encrypt_password(password)
@@ -361,10 +420,11 @@ def add_account(phone: str, password: str, label: str = "", max_tasks: int = 0, 
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO accounts (phone, password, label, max_tasks, mode, enabled, auto_withdraw, withdraw_amount, pay_password, withdraw_wallet, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO accounts (phone, password, label, max_tasks, mode, enabled, auto_withdraw, withdraw_amount, pay_password, withdraw_wallet, window_start, window_end, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (clean_phone, enc_pwd, label or f"Account {clean_phone[-4:]}", max_tasks, mode, enabled,
-          int(auto_withdraw), float(withdraw_amount), enc_pay_pwd, int(withdraw_wallet), now))
+          int(auto_withdraw), float(withdraw_amount), enc_pay_pwd, int(withdraw_wallet),
+          _norm_window(window_start), _norm_window(window_end), now))
     new_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -375,7 +435,8 @@ def update_account(account_id: int, phone: Optional[str] = None, password: Optio
                    label: Optional[str] = None, max_tasks: Optional[int] = None,
                    mode: Optional[str] = None, enabled: Optional[int] = None,
                    auto_withdraw: Optional[int] = None, withdraw_amount: Optional[float] = None,
-                   pay_password: Optional[str] = None, withdraw_wallet: Optional[int] = None) -> Optional[Dict[str, Any]]:
+                   pay_password: Optional[str] = None, withdraw_wallet: Optional[int] = None,
+                   window_start: Optional[str] = None, window_end: Optional[str] = None) -> Optional[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -408,6 +469,12 @@ def update_account(account_id: int, phone: Optional[str] = None, password: Optio
     if pay_password is not None and pay_password.strip() != "":
         fields.append("pay_password = ?")
         values.append(encrypt_password(pay_password.strip()))
+    if window_start is not None:
+        fields.append("window_start = ?")
+        values.append(_norm_window(window_start))
+    if window_end is not None:
+        fields.append("window_end = ?")
+        values.append(_norm_window(window_end))
     if withdraw_wallet is not None:
         fields.append("withdraw_wallet = ?")
         values.append(int(withdraw_wallet))

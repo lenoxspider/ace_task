@@ -13,7 +13,128 @@ from typing import Callable, Optional, Dict, Any
 
 import db
 
+# Shared window helpers (aliased so the allocator below stays self-contained).
+min_to_hhmm = db.min_to_hhmm
+hhmm_to_min = db.hhmm_to_min
+
 logger = logging.getLogger("Scheduler")
+
+
+
+# ==============================================================================
+# Per-account time windows
+# ==============================================================================
+def merge_windows(intervals):
+    """Union overlapping (start, end) intervals so overlapping windows are spaced together."""
+    merged = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def plan_task_slots(entries, now_min, spacing, duration, cutoff_min, policy="late"):
+    """Pure allocator: place every account's run inside its own window without clustering.
+
+    entries: [{"id", "label", "phone", "start", "end"}] with start/end in minutes from midnight
+    Returns {"slots": [...], "clusters": [...], "problems": [...], "skipped": [...]}.
+
+    Rules:
+      * overlapping windows are merged into one cluster and spaced together
+      * capacity of a cluster is (length - duration) / spacing + 1; overflow is reported,
+        never silently relocated
+      * a slot must start and finish inside its own window
+      * windows that have already closed are run late (policy="late"), up to cutoff_min
+    """
+    slots, problems, skipped = [], [], []
+    day_end = min(24 * 60, cutoff_min)
+
+    in_window, closed = [], []
+    for e in entries:
+        (closed if e["end"] <= now_min else in_window).append(e)
+
+    latest_start = day_end - duration
+    for idx, e in enumerate(sorted(closed, key=lambda x: (x["start"], x["end"]))):
+        if policy != "late":
+            skipped.append({"account_id": e["id"], "label": e["label"],
+                            "reason": "window already closed"})
+            continue
+        # Stagger late runs by the same spacing, otherwise every missed account would fire
+        # in the same tick and cluster.
+        start = now_min + idx * spacing
+        if start > latest_start:
+            skipped.append({"account_id": e["id"], "label": e["label"],
+                            "reason": "past the %s cutoff for today" % min_to_hhmm(day_end)})
+            continue
+        slots.append({"account_id": e["id"], "label": e["label"], "phone": e.get("phone", ""),
+                      "start": start, "late": True, "source": e.get("source", "")})
+
+    clusters = merge_windows([(e["start"], e["end"]) for e in in_window])
+    for cluster_start, cluster_end in clusters:
+        members = sorted([e for e in in_window if e["start"] < cluster_end and e["end"] > cluster_start],
+                         key=lambda e: (e["start"], e["end"]))
+        if not members:
+            continue
+        capacity = (cluster_end - cluster_start - duration) // spacing + 1
+        needed = (len(members) - 1) * spacing + duration
+        if len(members) > capacity:
+            problems.append({
+                "kind": "capacity",
+                "window": "%s-%s" % (min_to_hhmm(cluster_start), min_to_hhmm(cluster_end)),
+                "accounts": [m["label"] for m in members],
+                "capacity": capacity,
+                "needed_minutes": needed,
+                "message": ("%s-%s holds %d account(s) at %d min spacing, but %d are queued "
+                            "(%s) - needs %d min (widen by %d min or lower the spacing)"
+                            % (min_to_hhmm(cluster_start), min_to_hhmm(cluster_end), capacity, spacing,
+                               len(members), ", ".join(m["label"] for m in members),
+                               needed, max(0, needed - (cluster_end - cluster_start)))),
+            })
+            continue
+
+        # Pass 1: earliest-feasible packing. This proves the cluster really fits and gives
+        # every run the room it needs. Picking slots at random here would let an early
+        # account consume the space a later one depends on.
+        starts = []
+        cursor = cluster_start
+        infeasible = None
+        for idx, member in enumerate(members):
+            gap = spacing if idx else 0          # spacing applies BETWEEN runs, not before the first
+            start = max(cursor + gap, member["start"])
+            if start + duration > member["end"] or start + duration > cluster_end:
+                infeasible = member
+                break
+            starts.append(start)
+            cursor = start
+
+        if infeasible is not None:
+            problems.append({
+                "kind": "no_room",
+                "account": infeasible["label"],
+                "message": ("'%s' has no room left in %s-%s once the accounts before it are placed"
+                            % (infeasible["label"], min_to_hhmm(infeasible["start"]),
+                               min_to_hhmm(infeasible["end"]))),
+            })
+            continue
+
+        # Pass 2: jitter each run inside its own slack, never breaking spacing or the window.
+        for idx, member in enumerate(members):
+            lower = starts[idx]
+            if idx + 1 < len(members):
+                upper = min(member["end"] - duration, starts[idx + 1] - spacing)
+            else:
+                upper = min(member["end"] - duration, cluster_end - duration)
+            upper = max(lower, upper)
+            slot = random.randint(lower, upper)
+            slots.append({"account_id": member["id"], "label": member["label"],
+                          "phone": member.get("phone", ""), "start": slot, "late": False,
+                          "source": member.get("source", "")})
+
+    slots.sort(key=lambda s: s["start"])
+    return {"slots": slots, "clusters": [[a, b] for a, b in clusters],
+            "problems": problems, "skipped": skipped}
 
 
 class SmartScheduler:
@@ -198,48 +319,57 @@ class SmartScheduler:
             self.last_task_schedule_date = today_str
             return
 
-        # Pattern-free randomization: Shuffle accounts so execution order is NEVER fixed
-        random.shuffle(pending_accounts)
-
-        # Base time: Ensure tasks start during the 09:00 - 17:00 operational window
-        if now.hour < 9:
-            base_dt = now.replace(hour=9, minute=random.randint(2, 15), second=random.randint(0, 59))
-        elif now.hour >= 17:
-            # If for some reason the scheduler generates late, don't schedule today's tasks
-            self.last_task_schedule_date = today_str
-            return
-        else:
-            base_dt = now + timedelta(minutes=random.randint(2, 6), seconds=random.randint(0, 59))
-
+        # Every account runs inside its own window. Overlapping windows are merged into one
+        # cluster and spaced together; an overflowing cluster is reported, never relocated.
         if self.last_task_schedule_date != today_str:
             self.daily_task_schedule.clear()
 
-        schedule_summary = []
+        entries = []
         for a in pending_accounts:
             acc_id = a["id"]
-            if acc_id in self.daily_task_schedule and self.daily_task_schedule[acc_id]["status"] in ("completed", "running"):
+            existing = self.daily_task_schedule.get(acc_id)
+            if existing and existing["status"] in ("completed", "running"):
                 continue
+            start_min, end_min, source = db.resolve_window(a)
+            entries.append({
+                "id": acc_id,
+                "label": a.get("label") or a["phone"],
+                "phone": a["phone"],
+                "start": start_min,
+                "end": end_min,
+                "source": source,
+            })
 
-            step_mins = random.randint(min_spacing, max_spacing)
-            step_secs = random.randint(0, 59)
-            base_dt = base_dt + timedelta(minutes=step_mins, seconds=step_secs)
+        duration = int(db.get_setting("slot_duration_minutes", "10") or "10")
+        cutoff = db.hhmm_to_min(db.get_setting("late_run_cutoff", "23:00")) or 23 * 60
+        policy = db.get_setting("missed_window_policy", "late")
 
-            # Strict guard: If accumulated spacing pushes the execution time past 17:00,
-            # wrap it around to a random time between 13:00 and 16:45 to prevent clustering and obey window.
-            if base_dt.hour >= 17:
-                base_dt = base_dt.replace(hour=random.randint(13, 16), minute=random.randint(0, 45), second=random.randint(0, 59))
+        plan = plan_task_slots(entries, now.hour * 60 + now.minute, min_spacing, duration, cutoff, policy)
 
-            slot_str = base_dt.strftime("%Y-%m-%d %H:%M:%S")
-            label = a.get("label") or a["phone"]
+        schedule_summary = []
+        for slot in plan["slots"]:
+            acc_id = slot["account_id"]
+            start_dt = now.replace(hour=slot["start"] // 60, minute=slot["start"] % 60,
+                                   second=random.randint(0, 59), microsecond=0)
             self.daily_task_schedule[acc_id] = {
                 "account_id": acc_id,
-                "label": label,
-                "phone": a["phone"],
-                "scheduled_time": slot_str,
-                "status": "scheduled"
+                "label": slot["label"],
+                "phone": slot["phone"],
+                "scheduled_time": start_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "status": "scheduled",
             }
-            time_display = base_dt.strftime("%H:%M:%S")
-            schedule_summary.append(f"'{label}' at {time_display}")
+            schedule_summary.append("'%s' at %s%s" % (slot["label"], db.min_to_hhmm(slot["start"]),
+                                                      " (late)" if slot["late"] else ""))
+
+        for problem in plan["problems"]:
+            logger.warning("[Task Windows] %s" % problem["message"])
+            if self.broadcast_callback:
+                self.broadcast_callback("Time window: %s" % problem["message"], "warning")
+        for skip in plan["skipped"]:
+            logger.warning("[Task Windows] '%s' skipped: %s" % (skip["label"], skip["reason"]))
+            if self.broadcast_callback:
+                self.broadcast_callback("Time window: '%s' was not scheduled - %s" % (skip["label"], skip["reason"]),
+                                        "warning")
 
         self.last_task_schedule_date = today_str
 
@@ -338,6 +468,14 @@ class SmartScheduler:
             return
 
         now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        cutoff = db.hhmm_to_min(db.get_setting("late_run_cutoff", "23:00")) or 23 * 60
+        if now.hour * 60 + now.minute > cutoff:
+            # Past close of day: any slot still waiting is dropped (it runs again tomorrow).
+            for acc_id, slot_info in list(self.daily_task_schedule.items()):
+                if slot_info["status"] == "scheduled":
+                    slot_info["status"] = "skipped"
+                    db.update_daily_task_slot_status(acc_id, "skipped")
+            return
         for acc_id, slot_info in list(self.daily_task_schedule.items()):
             if slot_info["status"] == "scheduled" and now_str >= slot_info["scheduled_time"]:
                 slot_info["status"] = "running"
