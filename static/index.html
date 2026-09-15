@@ -1,1171 +1,167 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-density="compact">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ace775 Automation Control Center</title>
-  <meta name="description" content="Multi-account automation control panel for Ace775 daily task claims, check-ins, and scheduled operations.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overview · Ace775 Command Center</title>
+  <meta name="description" content="Ace775 automation control center — system vitals, rotation metrics and 7-day earnings.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/variables.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/base.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/sidebar.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/header.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/stats.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/accounts.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/terminal.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/analytics.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/modals.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/accessibility.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/toasts.css?v=3.5">
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=3.5">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
 </head>
-<body>
+<body data-page="overview">
 
-  <div class="app-shell">
-  <div id="toast-container" class="toast-container"></div>
-    
-    <!-- Mobile Backdrop -->
-    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleMobileMenu()"></div>
+  <div class="app" id="app">
+    <aside class="rail" id="rail-mount"></aside>
 
-    <!-- Navigation Sidebar -->
-    <aside class="sidebar" id="sidebar">
-      <!-- 1. Header: Brand & Collapse -->
-      <div class="sidebar-header">
-        <div class="sidebar-brand-wrapper">
-          <div class="sidebar-logo" title="Ace775 Command Center">⚡</div>
-          <div class="sidebar-brand">
-            <h1>Ace775 Command</h1>
+    <div class="main">
+      <header class="topbar" id="topbar-mount"></header>
+
+      <div class="previewstrip" id="preview-strip">
+        <span data-preview-icon></span>
+        <span data-preview-text>Sample data — connect the app server to see live data.</span>
+      </div>
+
+      <main class="page">
+        <div class="pagehead">
+          <div class="pagehead__title">
+            <span class="eyebrow">Command center</span>
+            <h1>Operations overview</h1>
+            <p>System vitals, active rotation and the 7-day earnings trajectory — all read from the same source the bot uses.</p>
           </div>
-        </div>
-        <button type="button" class="btn-sidebar-collapse" id="btn-sidebar-collapse" onclick="toggleSidebarCollapse()" title="Collapse sidebar (Ctrl+B)" aria-label="Toggle sidebar collapse">
-          <span class="collapse-icon">◀</span>
-        </button>
-      </div>
-
-      <!-- 2. Live Operational Status Card -->
-      <div class="sidebar-status-card" id="sidebar-op-widget" data-title="Tasks run Mon-Sat at any hour">
-        <div class="status-card-header">
-          <span class="status-indicator-dot dot-active" id="op-dot"></span>
-          <span class="status-card-state" id="op-state-title">Tasks Open</span>
-        </div>
-        <div class="status-card-details">
-          <span class="status-card-time" id="op-window-hours">Tasks: Mon-Sat, any hour</span>
-          <span class="status-card-sub" id="op-sub-info">Scheduler: Active</span>
-        </div>
-      </div>
-
-      <!-- 3. Navigation Groups -->
-      <nav class="sidebar-nav">
-        <div class="nav-group">
-          <span class="nav-section-title">Core Management</span>
-          <a class="nav-link active" data-page="overview" data-title="Overview" onclick="navigate('overview')">
-            <span class="nav-icon">📊</span>
-            <span class="nav-label">Overview</span>
-          </a>
-          <a class="nav-link" data-page="accounts" data-title="Accounts" onclick="navigate('accounts')">
-            <span class="nav-icon">👥</span>
-            <span class="nav-label">Accounts</span>
-            <span class="nav-badge" id="badge-account-count">0</span>
-          </a>
-          <a class="nav-link" data-page="terminal" data-title="Live Terminal" onclick="navigate('terminal')">
-            <span class="nav-icon">💻</span>
-            <span class="nav-label">Live Terminal</span>
-            <span class="sched-dot"></span>
-          </a>
-          <a class="nav-link" data-page="withdrawals" data-title="Withdrawals" onclick="navigate('withdrawals')">
-            <span class="nav-icon">💸</span>
-            <span class="nav-label">Withdrawals</span>
-          </a>
-        </div>
-
-        <div class="sidebar-divider"></div>
-
-        <div class="nav-group">
-          <span class="nav-section-title">System & Records</span>
-          <a class="nav-link" data-page="history" data-title="Audit History" onclick="navigate('history')">
-            <span class="nav-icon">📜</span>
-            <span class="nav-label">Audit History</span>
-          </a>
-          <a class="nav-link" data-page="settings" data-title="Settings" onclick="navigate('settings')">
-            <span class="nav-icon">⚙️</span>
-            <span class="nav-label">Settings</span>
-          </a>
-        </div>
-      </nav>
-
-      <!-- 4. Footer: Theme Segmented Control & Metadata -->
-      <div class="sidebar-footer">
-        <div class="theme-segmented-control" role="group" aria-label="Theme & Contrast Mode">
-          <button id="theme-btn-dark" class="theme-segment-btn active" onclick="setThemeMode('dark')" title="Dark Theme" aria-label="Dark Theme">
-            <span>🌙</span> <span class="segment-label">Dark</span>
-          </button>
-          <button id="theme-btn-light" class="theme-segment-btn" onclick="setThemeMode('light')" title="Light Theme" aria-label="Light Theme">
-            <span>☀️</span> <span class="segment-label">Light</span>
-          </button>
-          <button id="theme-btn-hc" class="theme-segment-btn" onclick="toggleHighContrast()" title="High Contrast Mode" aria-pressed="false" aria-label="High Contrast Mode">
-            <span>🔆</span> <span class="segment-label">HC</span>
-          </button>
-        </div>
-
-        <div class="sidebar-actions-row">
-          <button id="btn-logout" class="btn btn-xs btn-ghost btn-logout" onclick="handleLogout()" title="Lock dashboard & log out">
-            <span>🔒</span> <span class="footer-label">Lock Session</span>
-          </button>
-        </div>
-
-        <div class="sidebar-meta-tag">
-          <span>ace-v3.5</span> • <span>127.0.0.1:8000</span>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Main Content Area -->
-    <main class="main-content-area">
-
-      <!-- Mobile Top Bar -->
-      <div class="mobile-top-bar">
-        <div class="brand-group">
-          <div class="brand-logo" style="width:34px;height:34px;font-size:1.1rem;">⚡</div>
-          <span style="font-weight:700;font-size:1rem;">Ace775 Command</span>
-        </div>
-        <button class="btn-hamburger" onclick="toggleMobileMenu()" aria-label="Toggle Navigation">
-          <span class="hamburger-bar"></span>
-          <span class="hamburger-bar"></span>
-          <span class="hamburger-bar"></span>
-        </button>
-      </div>
-
-      <!-- ====================================================================
-           PAGE 1: OVERVIEW
-           ==================================================================== -->
-      <div class="page-view active" id="page-overview">
-        <div class="page-header-row">
-          <div class="page-title">
-            <h2>Command Center Overview</h2>
-            <p>System vitals, active rotation metrics, and 7-day earnings trajectory.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-secondary" onclick="openImportModal()" title="Batch import accounts via CSV">
-              <span class="btn-icon">📥</span> Import CSV
+          <div class="pagehead__actions">
+            <button class="btn" id="btn-import">
+              <span data-i="upload"></span> Import CSV
             </button>
-            <button class="btn btn-secondary" onclick="openAccountModal()">
-              <span class="btn-icon">+</span> Add Account
+            <button class="btn" id="btn-add">
+              <span data-i="plus"></span> Add account
             </button>
-            <button class="btn btn-primary" id="btn-run-all" onclick="runAllAccounts()">
-              <span class="btn-icon">▶</span> Run All Active
+            <button class="btn btn--primary" id="btn-run-all">
+              <span data-i="play"></span> Run all active
             </button>
           </div>
         </div>
 
-        <!-- 4-Card Stats Banner -->
-        <section class="stats-grid" id="stats-section">
-          <div class="stat-card">
-            <div class="stat-header">
-              <span class="stat-title">Total Accounts</span>
-              <span class="stat-icon">👥</span>
-            </div>
-            <div class="stat-value" id="stat-total-accounts">0</div>
-            <div class="stat-footer" id="stat-active-subtitle">0 active in rotation</div>
+        <!-- KPI row -->
+        <section class="notice notice--accent" id="status-strip">
+          <span data-i="activity" data-size="18"></span>
+          <div class="grow">
+            <b id="status-label">Checking operational window…</b>
+            <p id="status-detail">Scheduler status loads in a moment.</p>
           </div>
+          <span class="dot dot--off" id="status-dot"></span>
+        </section>
 
-          <div class="stat-card">
-            <div class="stat-header">
-              <span class="stat-title">Tasks Completed Today</span>
-              <span class="stat-icon">✅</span>
-            </div>
-            <div class="stat-value" id="stat-tasks-today">0</div>
-            <div class="stat-footer">Active accounts only</div>
+        <section class="grid grid--kpi">
+          <div class="kpi">
+            <div class="kpi__label"><span class="eyebrow">Accounts</span><span data-i="users"></span></div>
+            <div class="kpi__value" id="kpi-total">0</div>
+            <div class="kpi__meta" id="kpi-total-sub">—</div>
           </div>
-
-          <div class="stat-card accent-card">
-            <div class="stat-header">
-              <span class="stat-title">Total Earned Today</span>
-              <span class="stat-icon">💰</span>
-            </div>
-            <div class="stat-value" id="stat-earned-today">0.00 <span class="currency">GHS</span></div>
-            <div class="stat-footer">Active accounts only</div>
+          <div class="kpi">
+            <div class="kpi__label"><span class="eyebrow">In rotation</span><span data-i="activity"></span></div>
+            <div class="kpi__value" id="kpi-active">0</div>
+            <div class="kpi__meta" id="kpi-active-sub">—</div>
           </div>
-
-          <div class="stat-card">
-            <div class="stat-header">
-              <span class="stat-title">Telegram Bot</span>
-              <span class="stat-icon">📱</span>
-            </div>
-            <div class="stat-value status-active" id="stat-telegram-status">Connected</div>
-            <div class="stat-footer">Two-Way /status & /run</div>
+          <div class="kpi">
+            <div class="kpi__label"><span class="eyebrow">Tasks today</span><span data-i="check"></span></div>
+            <div class="kpi__value" id="kpi-tasks">0</div>
+            <div class="kpi__meta" id="kpi-tasks-sub">—</div>
+          </div>
+          <div class="kpi kpi--accent">
+            <div class="kpi__label"><span class="eyebrow">Earned today</span><span data-i="trend"></span></div>
+            <div class="kpi__value" id="kpi-earned">0.00 <small>GHS</small></div>
+            <div class="kpi__meta" id="kpi-earned-sub">—</div>
           </div>
         </section>
 
-        <!-- 7-Day Performance Trend Chart -->
-        <section class="content-panel analytics-panel">
-          <div class="panel-header">
-            <div class="panel-title-group">
-              <h2>7-Day Earnings & Activity Trend</h2>
-              <span class="badge badge-mode">GHS Performance</span>
+        <!-- Trend -->
+        <section class="panel">
+          <div class="panel__head">
+            <div class="panel__title">
+              <h2>7-day earnings &amp; activity</h2>
+              <span class="badge badge--accent">GHS performance</span>
             </div>
-            <div class="panel-tools">
-              <button class="btn btn-xs btn-ghost" onclick="navigate('history')" title="View full execution audit log">
-                <span class="btn-icon">📜</span> Audit Log
-              </button>
-              <a href="/api/export/csv" class="btn btn-xs btn-secondary" download="ace775_financial_report.csv" title="Download Excel/CSV Spreadsheet">
-                <span class="btn-icon">💾</span> Export CSV
+            <div class="panel__tools">
+              <a class="btn btn--sm btn--ghost" href="history.html" data-href-route="/history">
+                <span data-i="scroll"></span> Audit log
               </a>
+              <button class="btn btn--sm" id="btn-export">
+                <span data-i="download"></span> Export CSV
+              </button>
             </div>
           </div>
-          <div class="chart-container" id="chart-container">
-            <div class="empty-placeholder">Loading 7-day analytics...</div>
+          <div class="panel__body">
+            <div class="chart" id="chart">
+              <div class="skeleton" style="grid-column:1/-1;height:200px"></div>
+            </div>
           </div>
         </section>
 
-        <!-- Overview Quick Accounts & Terminal Grid -->
-        <div class="main-content">
-          <!-- Accounts Section -->
-          <section class="content-panel accounts-panel">
-            <div class="panel-header">
-              <div class="panel-title-group">
-                <h2>Accounts Rotation</h2>
-              </div>
-              <div class="panel-tools">
-                <button class="btn btn-xs btn-ghost" onclick="navigate('accounts')">View All &rarr;</button>
+        <!-- Rotation + console -->
+        <div class="grid grid--2">
+          <section class="panel">
+            <div class="panel__head">
+              <div class="panel__title"><h2>Active rotation</h2><span class="badge" id="rot-count">—</span></div>
+              <div class="panel__tools">
+                <a class="btn btn--sm btn--ghost" href="accounts.html" data-href-route="/accounts">View all <span data-i="chevronRight"></span></a>
               </div>
             </div>
-            <div class="accounts-container" id="accounts-list">
-              <div class="empty-placeholder">Loading accounts...</div>
+            <div class="panel__body panel__body--flush" id="overview-accounts">
+              <div class="skeleton skeleton--line" style="margin:16px"></div>
+              <div class="skeleton skeleton--line" style="margin:16px"></div>
+              <div class="skeleton skeleton--line" style="margin:16px"></div>
             </div>
           </section>
 
-          <!-- Live Terminal Preview -->
-          <section class="content-panel terminal-panel">
-            <div class="panel-header">
-              <div class="panel-title-group">
-                <h2>Live Automation Console</h2>
-                <span class="pulse-indicator"></span>
-              </div>
-              <div class="panel-tools">
-                <button class="btn btn-xs btn-ghost" onclick="navigate('terminal')">Full View &rarr;</button>
-                <button class="btn btn-xs btn-ghost" onclick="clearTerminalLogs()">Clear</button>
+          <section class="panel">
+            <div class="panel__head">
+              <div class="panel__title"><h2>Live console</h2><span class="dot dot--live" title="Streaming"></span></div>
+              <div class="panel__tools">
+                <a class="btn btn--sm btn--ghost" href="terminal.html" data-href-route="/terminal">Full view <span data-i="chevronRight"></span></a>
               </div>
             </div>
-
-            <!-- Console Filter Toolbar -->
-            <div class="terminal-toolbar">
-              <div class="terminal-filter-group" role="group" aria-label="Log Filter">
-                <button class="terminal-pill-btn active" data-filter="all" onclick="setTerminalFilter('all')">All</button>
-                <button class="terminal-pill-btn" data-filter="info" onclick="setTerminalFilter('info')">Info</button>
-                <button class="terminal-pill-btn" data-filter="warning" onclick="setTerminalFilter('warning')">Warn</button>
-                <button class="terminal-pill-btn" data-filter="error" onclick="setTerminalFilter('error')">Error</button>
-                <button class="terminal-pill-btn" data-filter="success" onclick="setTerminalFilter('success')">Success</button>
+            <div class="toolbar" id="term-toolbar">
+              <div class="tabs" role="tablist" aria-label="Log level">
+                <button data-filter="all" aria-selected="true">All</button>
+                <button data-filter="info" aria-selected="false">Info</button>
+                <button data-filter="success" aria-selected="false">Success</button>
+                <button data-filter="warning" aria-selected="false">Warn</button>
+                <button data-filter="error" aria-selected="false">Error</button>
               </div>
-
-              <div style="display:flex; align-items:center; gap:6px;">
-                <input type="text" class="terminal-search-input" placeholder="Search logs..." oninput="filterTerminalSearch(this.value)">
-                <button class="terminal-pill-btn btn-terminal-pause" onclick="toggleTerminalPause()" title="Pause autoscroll">⏸ Pause</button>
+              <div class="topbar__spacer"></div>
+              <div class="search" style="max-width:220px">
+                <span data-i="search"></span>
+                <input type="search" id="term-search" placeholder="Search logs…" aria-label="Search logs">
               </div>
+              <button class="btn btn--sm btn--icon" id="term-pause" aria-pressed="false" title="Pause autoscroll"><span data-i="pause"></span></button>
+              <button class="btn btn--sm btn--icon" id="term-clear" title="Clear"><span data-i="trash"></span></button>
             </div>
-
-            <div class="terminal-body" id="terminal-logs" role="log" aria-live="polite">
-              <div class="log-line log-info">
-                <span class="log-time">--:--:--</span>
-                <span class="log-badge">info</span>
-                <span class="log-text">[SYSTEM] Connected to automation stream. Ready.</span>
-              </div>
+            <div class="panel__body">
+              <div class="terminal" id="term-preview" style="height:296px;max-height:296px"></div>
             </div>
           </section>
         </div>
-      </div>
-
-      <!-- ====================================================================
-           PAGE 2: ACCOUNTS MANAGEMENT
-           ==================================================================== -->
-      <div class="page-view" id="page-accounts">
-        <div class="page-header-row">
-          <div class="page-title">
-            <h2>Configured Accounts Manager</h2>
-            <p>Manage credentials, VIP levels, auto-withdrawal targets, and 1-click pause/resume task controls.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-secondary" onclick="openImportModal()">
-              <span class="btn-icon">📥</span> Import CSV
-            </button>
-            <button class="btn btn-secondary" onclick="openAccountModal()">
-              <span class="btn-icon">+</span> Add Account
-            </button>
-            <button class="btn btn-primary" onclick="runAllAccounts()">
-              <span class="btn-icon">▶</span> Run All Active
-            </button>
-          </div>
-        </div>
-
-        <section class="content-panel full-page-panel">
-          <div class="accounts-toolbar">
-            <div class="filter-tabs" id="account-filter-tabs">
-              <button class="filter-tab active" data-filter="all" onclick="setAccountFilter('all')">
-                All (<span id="filter-cnt-all">0</span>)
-              </button>
-              <button class="filter-tab" data-filter="active" onclick="setAccountFilter('active')">
-                🟢 Active (<span id="filter-cnt-active">0</span>)
-              </button>
-              <button class="filter-tab" data-filter="paused" onclick="setAccountFilter('paused')">
-                ⏸️ Paused (<span id="filter-cnt-paused">0</span>)
-              </button>
-              <button class="filter-tab" data-filter="running" onclick="setAccountFilter('running')">
-                ⚡ Running (<span id="filter-cnt-running">0</span>)
-              </button>
-            </div>
-            <div class="search-wrapper">
-              <input type="text" id="account-search" placeholder="Search phone or label..." oninput="filterAccounts()">
-            </div>
-          </div>
-
-          <div class="accounts-container" id="accounts-page-list">
-            <!-- Dynamically populated -->
-            <div class="empty-placeholder">Loading accounts...</div>
-          </div>
-        </section>
-      </div>
-
-      <!-- ====================================================================
-           PAGE 3: LIVE TERMINAL
-           ==================================================================== -->
-      <div class="page-view" id="page-terminal">
-        <div class="page-header-row">
-          <div class="page-title">
-            <h2>Live Automation Console & Stream</h2>
-            <p>Real-time execution telemetry, anti-ban pacing logs, and network verification events.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-secondary" onclick="clearTerminalLogs()">
-              <span class="btn-icon">🧹</span> Clear Logs
-            </button>
-            <label class="toggle-label" style="margin-left:8px;">
-              <input type="checkbox" id="chk-autoscroll" checked> Auto-scroll
-            </label>
-          </div>
-        </div>
-
-        <section class="content-panel full-page-panel terminal-panel">
-          <div class="panel-header">
-            <div class="panel-title-group">
-              <span class="pulse-indicator"></span>
-              <span style="font-size:0.85rem;font-weight:600;color:var(--text-main);">SSE Stream: /api/logs/stream</span>
-            </div>
-            <div class="panel-tools">
-              <span class="badge badge-active">CONNECTED</span>
-            </div>
-          </div>
-          <div class="terminal-body" id="terminal-page-logs" style="max-height:calc(100vh - 240px); height:600px;">
-            <div class="log-line log-info">[SYSTEM] Live terminal initialized. Ready for automation events.</div>
-          </div>
-        </section>
-      </div>
-
-      <!-- ====================================================================
-           PAGE 4: AUDIT HISTORY
-           ==================================================================== -->
-      <div class="page-view" id="page-history">
-        <div class="page-header-row">
-          <div class="page-title">
-            <h2>Execution Audit History & Logs</h2>
-            <p>Complete historical log of daily task executions, claimed commissions, and error diagnostics.</p>
-          </div>
-          <div class="header-actions">
-            <a href="/api/export/csv" class="btn btn-secondary" download="ace775_financial_report.csv">
-              <span class="btn-icon">💾</span> Export CSV
-            </a>
-          </div>
-        </div>
-
-        <section class="content-panel full-page-panel">
-          <div class="panel-header">
-            <div class="panel-title-group">
-              <h2>Execution Records</h2>
-              <span class="badge badge-count" id="badge-history-page-count">0</span>
-            </div>
-            <div class="panel-tools">
-              <button class="btn btn-xs btn-secondary" onclick="loadAuditHistoryTable()">
-                <span class="btn-icon">🔄</span> Refresh
-              </button>
-            </div>
-          </div>
-          <div class="history-table-wrapper" style="max-height:calc(100vh - 260px);">
-            <table class="history-table">
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Account</th>
-                  <th>Execution Status</th>
-                  <th>Tasks</th>
-                  <th>Profit Earned</th>
-                  <th>Wallet Balance</th>
-                </tr>
-              </thead>
-              <tbody id="history-page-table-body">
-                <tr><td colspan="6" class="table-empty">Loading history records...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-
-      <!-- ====================================================================
-           PAGE 5: WITHDRAWALS & PAYOUTS
-           ==================================================================== -->
-      <div class="page-view" id="page-withdrawals">
-        <div class="page-header-row">
-          <div class="page-title">
-            <h2>Financial Payouts & Withdrawals</h2>
-            <p>Monitor wallet balances, submit daily withdrawals, and review automatic payout rules.</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-primary" onclick="openWithdrawModal()">
-              <span class="btn-icon">💸</span> Request Withdrawal
-            </button>
-          </div>
-        </div>
-
-        <!-- Withdrawal Notice Banner -->
-        <div class="stat-card accent-card" style="padding:16px 20px;">
-          <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size:1.6rem;">⏱️</span>
-            <div>
-              <strong style="color:#ffffff;">Ace775 Platform Withdrawal Window: 09:00 – 17:00 (Monday – Friday)</strong>
-              <p style="font-size:0.8rem; color:var(--text-muted);">
-                You can withdraw once per calendar day to your bound Mobile Money (MoMo) account (Monday through Friday only; closed weekends). Auto-withdrawals run automatically after tasks complete when enabled. Ace775 only accepts fixed denominations.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Live Withdrawal Queue Card (Anti-Clustering Pacing Engine) -->
-        <section class="content-panel" id="card-withdrawal-queue" style="border-left: 3px solid var(--accent-green);">
-          <div class="panel-header">
-            <div class="panel-title-group">
-              <h2>⏳ Live Withdrawal Queue</h2>
-              <span class="badge" id="badge-queue-count" style="background:rgba(16,185,129,0.15); color:var(--accent-green); font-weight:600;">0 Pending</span>
-            </div>
-            <div class="panel-tools">
-              <span style="font-size:0.75rem; color:var(--text-muted); margin-right:8px;">Operating Window: <strong>09:00 - 17:00</strong> (Mon - Fri)</span>
-              <button class="btn btn-xs btn-secondary" onclick="loadWithdrawalQueue()" title="Refresh withdrawal queue">
-                <span class="btn-icon">🔄</span> Refresh Queue
-              </button>
-            </div>
-          </div>
-          <div class="history-table-wrapper">
-            <table class="history-table">
-              <thead>
-                <tr>
-                  <th>Queue #</th>
-                  <th>Account</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Scheduled Slot</th>
-                  <th>Execution Details</th>
-                  <th style="text-align:right;">Action</th>
-                </tr>
-              </thead>
-              <tbody id="withdrawal-queue-tbody">
-                <tr><td colspan="7" class="table-empty">No active withdrawals in queue.</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <!-- Dedicated Auto-Withdrawal Rule Configurator Card -->
-        <section class="content-panel" id="card-auto-withdraw-setup" style="border-left: 3px solid var(--accent-cyan);">
-          <div class="panel-header">
-            <div class="panel-title-group">
-              <h2>⚙️ Auto-Withdrawal Rule Configurator</h2>
-              <span class="badge" style="background:rgba(6,182,212,0.15); color:var(--accent-cyan); font-weight:600;">Fixed Amounts Only</span>
-            </div>
-          </div>
-          <form id="paged-auto-withdraw-form" onsubmit="handlePagedAutoWithdrawSubmit(event)" style="padding:16px 20px;">
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                  <label for="withdraw-page-acc-select" style="margin-bottom:0;">Target Account</label>
-                  <button type="button" id="btn-sync-withdraw-tiers" class="btn btn-xs btn-secondary" onclick="refreshAccountWithdrawalOptions()" style="font-size:0.75rem; padding:2px 8px;" title="Fetch latest dynamic withdrawal tiers for this account from Ace775">🔄 Sync Tiers from Ace775</button>
-                </div>
-                <select id="withdraw-page-acc-select" onchange="onWithdrawPageAccountChange()" required>
-                  <option value="">-- Choose Account to Configure --</option>
-                </select>
-                <span class="form-hint" id="withdraw-page-acc-hint">Select an account to load or update its auto-withdrawal rule.</span>
-              </div>
-              <div class="form-group flex-1">
-                <label for="withdraw-page-wallet">Payout Wallet</label>
-                <select id="withdraw-page-wallet">
-                  <option value="2">Income / Commission Wallet (Default)</option>
-                  <option value="1">Personal Wallet</option>
-                </select>
-                <span class="form-hint">Income wallet holds your daily task commissions.</span>
-              </div>
-            </div>
-
-            <div class="form-group checkbox-group" style="margin-top:12px;">
-              <label class="checkbox-label">
-                <input type="checkbox" id="withdraw-page-auto-toggle"> Enable Automatic Daily Withdrawal
-              </label>
-              <span class="form-hint">When enabled, the bot will auto-request a payout after tasks finish if operating hours (09:00 - 17:00, Mon - Fri) are open.</span>
-            </div>
-
-            <!-- Fixed Amount Options Selector (Dropdown + Quick Buttons) -->
-            <div class="form-group" style="margin-top:12px;">
-              <label for="withdraw-page-fixed-amount">Select Fixed Auto-Payout Amount (GHS)</label>
-              <select id="withdraw-page-fixed-amount" onchange="syncWithdrawPagePills(this.value)">
-                <option value="0">Full Balance / Auto-Max Allowed (Default)</option>
-                <option value="65">65 GHS</option>
-                <option value="170">170 GHS</option>
-                <option value="525">525 GHS</option>
-                <option value="1600">1,600 GHS</option>
-                <option value="4500">4,500 GHS</option>
-                <option value="14000">14,000 GHS</option>
-                <option value="33500">33,500 GHS</option>
-                <option value="65000">65,000 GHS</option>
-                <option value="150000">150,000 GHS</option>
-                <option value="200000">200,000 GHS</option>
-                <option value="500000">500,000 GHS</option>
-                <option value="1000000">1,000,000 GHS</option>
-              </select>
-
-              <div class="quick-amounts-grid" id="withdraw-page-pills-grid">
-                <button type="button" class="amount-pill active" onclick="selectWithdrawPageAmount(0)">Full Bal</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(65)">65</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(170)">170</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(525)">525</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(1600)">1600</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(4500)">4500</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(14000)">14000</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(33500)">33500</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(65000)">65000</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(150000)">150000</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(200000)">200000</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(500000)">500000</button>
-                <button type="button" class="amount-pill" onclick="selectWithdrawPageAmount(1000000)">1000000</button>
-              </div>
-              <span class="form-hint">Ace775 exact denominations. Tap any amount button or select from the dropdown.</span>
-              <span class="form-hint" style="color:var(--accent-cyan); display:block; margin-top:6px;">
-                💡 <strong>Income Wallet Guard:</strong> Automatic withdrawals are drawn strictly from your <strong>Income Wallet</strong> (task commissions). If balance is below your chosen fixed tier (or below the 65 GHS platform minimum), the bot safely waits without errors until tasks accumulate sufficient funds.
-              </span>
-            </div>
-
-            <div class="form-row" style="margin-top:12px;">
-              <div class="form-group flex-1">
-                <label for="withdraw-page-pin">Transaction PIN / Payment Password</label>
-                <input type="password" id="withdraw-page-pin" placeholder="Enter 6-digit payment PIN" autocomplete="off">
-                <span class="form-hint">Stored encrypted. Required by Ace775 to verify payouts to your MoMo.</span>
-              </div>
-            </div>
-
-            <div id="withdraw-page-status-banner" class="verify-status-banner" style="display:none; margin-top:12px;"></div>
-
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
-              <button type="submit" class="btn btn-primary" id="btn-save-paged-withdraw">
-                <span class="btn-icon">💾</span> Save Auto-Withdrawal Rule
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <!-- Accounts Auto-Withdrawal Status Table -->
-        <section class="content-panel">
-          <div class="panel-header">
-            <div class="panel-title-group">
-              <h2>Accounts Withdrawal Configuration</h2>
-            </div>
-            <div class="panel-tools">
-              <button class="btn btn-xs btn-secondary" onclick="loadWithdrawalsView()">
-                <span class="btn-icon">🔄</span> Refresh
-              </button>
-            </div>
-          </div>
-          <div class="history-table-wrapper">
-            <table class="history-table">
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th>Balance</th>
-                  <th>Auto-Withdraw</th>
-                  <th>Target Amount</th>
-                  <th>Last Withdraw Date</th>
-                  <th>Last Payout Status</th>
-                  <th style="text-align:right;">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="withdrawals-table-body">
-                <tr><td colspan="7" class="table-empty">Loading accounts payout data...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-
-      <!-- ====================================================================
-           PAGE 6: SETTINGS
-           ==================================================================== -->
-      <div class="page-view" id="page-settings">
-        <div class="page-header-row">
-          <div class="page-title">
-            <h2>System & Automation Settings</h2>
-            <p>Configure auto-scheduler working hours, two-way Telegram control, and platform base URLs.</p>
-          </div>
-        </div>
-
-        <section class="settings-layout">
-          <!-- Left Rail Navigation -->
-          <nav class="settings-rail" role="tablist" aria-label="Settings Categories">
-            <button type="button" class="settings-nav-btn active" role="tab" aria-selected="true" data-tab="tab-hours" onclick="switchSettingsTab('tab-hours')">
-              <span>⏰</span> Working Hours
-            </button>
-            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-midnight" onclick="switchSettingsTab('tab-midnight')">
-              <span>🌙</span> Midnight Automation
-            </button>
-            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-pacing" onclick="switchSettingsTab('tab-pacing')">
-              <span>🛡️</span> Anti-Clustering
-            </button>
-            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-telegram" onclick="switchSettingsTab('tab-telegram')">
-              <span>📱</span> Telegram Control
-            </button>
-            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-platform" onclick="switchSettingsTab('tab-platform')">
-              <span>🌐</span> Platform Host
-            </button>
-            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-windows" onclick="switchSettingsTab('tab-windows')">
-              <span>w</span> Time Windows
-            </button>
-            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-system" onclick="switchSettingsTab('tab-system')">
-              <span>v</span> System &amp; Updates
-            </button>
-          </nav>
-
-          <!-- Right Content Area with Sticky Footer Form -->
-          <form class="settings-main" onsubmit="handleSettingsSubmit(event)">
-            <!-- Tab 1: Working Hours & Platform Schedule -->
-            <div class="settings-tab-panel active" id="tab-hours" role="tabpanel">
-              <div class="settings-card">
-                <h4 class="settings-subhead">⏰ Platform Operating Hours & Rest Policy</h4>
-                <p class="settings-desc">Tasks run Monday to Saturday at any hour. Withdrawals are limited to Monday-Friday 09:00-17:00, and the platform is closed on Sundays.</p>
-                <div class="settings-badge-row">
-                  <span class="badge badge-primary">Tasks: Mon-Sat (any hour)</span>
-                  <span class="badge badge-warning">Withdrawals: Mon-Fri (09:00-17:00)</span>
-                  <span class="badge badge-neutral">Rest Day: Sunday (Automated Suspension)</span>
-                </div>
-              </div>
-
-              <div class="settings-card">
-                <h4 class="settings-subhead">Closed-Window Response (Safety Net)</h4>
-                <div class="form-group checkbox-group">
-                  <label class="checkbox-label">
-                    <input type="checkbox" id="set-auto-retry" checked> Retry if the platform reports a closed window
-                  </label>
-                  <span class="form-hint">Safety net only. Tasks are allowed at any hour, so this rarely triggers; it also covers the Sunday rest day and platform maintenance.</span>
-                </div>
-
-                <div class="form-group">
-                  <label for="set-retry-interval">Retry Interval (Minutes)</label>
-                  <input type="number" id="set-retry-interval" value="30" min="5" max="120" required>
-                  <span class="form-hint">Time to wait before re-attempting a task that encountered an outside-hours response.</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tab 2: Midnight Pattern-Free Task Automation -->
-            <div class="settings-tab-panel" id="tab-midnight" role="tabpanel">
-              <div class="settings-card">
-                <h4 class="settings-subhead">🌙 Daily Pattern-Free Task Automation</h4>
-                <div class="form-group checkbox-group">
-                  <label class="checkbox-label">
-                    <input type="checkbox" id="set-midnight-enabled" checked> Enable Pattern-Free Task Automation (Mon - Sat)
-                  </label>
-                  <span class="form-hint">Every day at 12:00 AM midnight, all accounts are shuffled and assigned completely randomized execution times throughout the day, executing all tasks when their time arrives.</span>
-                </div>
-              </div>
-
-              <div class="settings-card">
-                <h4 class="settings-subhead">⏱️ Execution Spacing Configuration</h4>
-                <div class="form-row">
-                  <div class="form-group flex-1">
-                    <label for="set-min-task-spacing">Min Task Spacing (Minutes)</label>
-                    <input type="number" id="set-min-task-spacing" value="15" min="5" max="60" required>
-                    <span class="form-hint">Minimum separation between accounts' scheduled execution slots.</span>
-                  </div>
-                  <div class="form-group flex-1">
-                    <label for="set-max-task-spacing">Max Task Spacing (Minutes)</label>
-                    <input type="number" id="set-max-task-spacing" value="35" min="10" max="120" required>
-                    <span class="form-hint">Maximum randomized delay between accounts. Shuffled freshly every midnight.</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tab 3: Anti-Clustering Withdrawal Pacing Engine -->
-            <div class="settings-tab-panel" id="tab-pacing" role="tabpanel">
-              <div class="settings-card">
-                <h4 class="settings-subhead">🛡️ Anti-Clustering Withdrawal Pacing Engine</h4>
-                <p class="settings-desc">Protects accounts by preventing simultaneous withdrawal requests. Operates strictly between 09:00 and 17:00 (Mon–Fri). Payout requests are queued and spaced out with randomized intervals.</p>
-                <div class="settings-badge-row">
-                  <span class="badge badge-success">Queue Anti-Clustering Active</span>
-                  <span class="badge badge-warning">09:00 – 17:00 Strict Window</span>
-                </div>
-              </div>
-
-              <div class="settings-card">
-                <h4 class="settings-subhead">⏱️ Pacing Interval Boundaries</h4>
-                <div class="form-row">
-                  <div class="form-group flex-1">
-                    <label for="set-min-spacing">Min Spacing Interval (Minutes)</label>
-                    <input type="number" id="set-min-spacing" value="25" min="15" max="120" required>
-                    <span class="form-hint">Minimum separation between consecutive account requests (≥ 15 min anti-clustering guard).</span>
-                  </div>
-                  <div class="form-group flex-1">
-                    <label for="set-max-spacing">Max Spacing Interval (Minutes)</label>
-                    <input type="number" id="set-max-spacing" value="50" min="20" max="240" required>
-                    <span class="form-hint">Maximum randomized interval. Successive withdrawals will be staggered by a random delay within this range.</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tab 4: Two-Way Telegram Control -->
-            <div class="settings-tab-panel" id="tab-telegram" role="tabpanel">
-              <div class="settings-card">
-                <h4 class="settings-subhead">📱 Telegram Bot Credentials</h4>
-                <div class="form-group">
-                  <label for="set-tg-token">Telegram Bot Token</label>
-                  <input type="text" id="set-tg-token" placeholder="8447722246:AAG9_XVP..." autocomplete="off">
-                  <span class="form-hint">Obtained from @BotFather on Telegram.</span>
-                </div>
-
-                <div class="form-group">
-                  <label for="set-tg-chat">Telegram Chat ID (Authorized)</label>
-                  <input type="text" id="set-tg-chat" placeholder="5511238401" autocomplete="off">
-                  <span class="form-hint">Only messages from this ID receive alerts, schedule briefings, and remote execution commands (/status, /run, /balance).</span>
-                </div>
-              </div>
-
-              <div class="settings-card">
-                <h4 class="settings-subhead">⚡ Telegram Connection Test</h4>
-                <p class="settings-desc">Send a verification test message to ensure the bot token and chat ID are functioning properly.</p>
-                <div>
-                  <button type="button" class="btn btn-secondary" id="btn-test-telegram" onclick="testTelegramConnection()">
-                    <span class="btn-icon">🔔</span> Test Telegram Connection
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tab 5: Platform Connection -->
-            <div class="settings-tab-panel" id="tab-platform" role="tabpanel">
-              <div class="settings-card">
-                <h4 class="settings-subhead">🌐 Platform Connection</h4>
-                <div class="form-group">
-                  <label for="set-base-url">Website Base URL</label>
-                  <input type="text" id="set-base-url" value="https://ace775.com" required>
-                  <span class="form-hint">The target platform host domain for API and Playwright browser automated sessions.</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tab 7: Time Windows -->
-            <div class="settings-tab-panel" id="tab-windows" role="tabpanel">
-              <div class="settings-card">
-                <h4 class="settings-subhead">Task Windows (GMT)</h4>
-                <p class="settings-desc">Tasks may run Monday to Saturday at any hour, so these windows are a preference: each account runs inside its own window. Withdrawals stay fixed to Mon-Fri 09:00-17:00.</p>
-                <div class="form-row">
-                  <div class="form-group flex-1">
-                    <label for="set-default-window-start">Default Window Start</label>
-                    <input type="time" id="set-default-window-start" value="04:00">
-                    <span class="form-hint">Used by accounts with no window of their own.</span>
-                  </div>
-                  <div class="form-group flex-1">
-                    <label for="set-default-window-end">Default Window End</label>
-                    <input type="time" id="set-default-window-end" value="08:00">
-                  </div>
-                </div>
-                <div class="form-row">
-                  <div class="form-group flex-1">
-                    <label for="set-slot-duration">Assumed Run Duration (Minutes)</label>
-                    <input type="number" id="set-slot-duration" value="10" min="1" max="60">
-                    <span class="form-hint">Used for the capacity numbers below.</span>
-                  </div>
-                  <div class="form-group flex-1">
-                    <label for="set-late-cutoff">Run-Late Cutoff (GMT)</label>
-                    <input type="time" id="set-late-cutoff" value="23:00">
-                    <span class="form-hint">A missed window still runs before this time; after it, it waits for tomorrow.</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="settings-card">
-                <h4 class="settings-subhead">Today&rsquo;s Windows</h4>
-                <p class="settings-desc">Which accounts share a window, and whether the window has room for them.</p>
-                <div id="windows-plan-body">loading...</div>
-                <button type="button" class="btn btn-secondary" id="btn-refresh-plan" onclick="loadWindowsPlan()" style="margin-top:10px;">Refresh Plan</button>
-              </div>
-            </div>
-
-            <!-- Tab 6: System & Updates -->
-            <div class="settings-tab-panel" id="tab-system" role="tabpanel">
-              <div class="settings-card">
-                <h4 class="settings-subhead">Installed Version</h4>
-                <p class="settings-desc">The code revision this host is currently running.</p>
-                <div class="settings-badge-row">
-                  <span class="badge badge-neutral" id="sys-version-commit">loading...</span>
-                  <span class="badge badge-neutral" id="sys-version-branch"></span>
-                </div>
-              </div>
-
-              <div class="settings-card">
-                <h4 class="settings-subhead">Pull &amp; Restart</h4>
-                <p class="settings-desc">Fetches the latest code from the repository and restarts the background service so it takes effect. The dashboard disconnects for a few seconds and you will need to log in again.</p>
-                <div class="form-group">
-                  <label for="sys-update-password">Confirm Master Password</label>
-                  <input type="password" id="sys-update-password" autocomplete="current-password" placeholder="Master password">
-                  <span class="form-hint">Required to confirm this action. Updates are refused while a batch run is in progress.</span>
-                </div>
-                <div class="settings-badge-row">
-                  <button type="button" class="btn btn-secondary" id="btn-sys-check" onclick="checkForUpdates()">Check for Updates</button>
-                  <button type="button" class="btn btn-primary" id="btn-sys-update" onclick="runSystemUpdate()">Pull &amp; Restart</button>
-                </div>
-                <pre id="sys-update-output" style="display:none; margin-top:12px; padding:10px; border-radius:8px; background:rgba(0,0,0,0.3); color:var(--text-dim,#c9d1d9); white-space:pre-wrap; font-size:0.78rem; max-height:220px; overflow:auto;"></pre>
-              </div>
-            </div>
-
-            <!-- Sticky Save Footer -->
-            <div class="settings-footer-actions">
-              <div class="settings-footer-info">
-                <span class="status-pulse-dot"></span>
-                <span>Host: <strong id="settings-footer-host">ace775.com</strong> &bull; Hot Reload Ready</span>
-              </div>
-              <button type="submit" class="btn btn-primary" id="btn-save-settings">
-                <span class="btn-icon">💾</span> Save System Settings
-              </button>
-            </div>
-          </form>
-        </section>
-      </div>
-
-    </main>
-  </div>
-
-  <!-- ====================================================================
-       MODALS (Accessible From Anywhere)
-       ==================================================================== -->
-
-  <!-- Modal: Add/Edit Account -->
-  <div class="modal-overlay" id="account-modal">
-    <div class="modal-card modal-account">
-      <div class="modal-header">
-        <h3 id="modal-title">Add New Account</h3>
-        <button class="modal-close" onclick="closeAccountModal()">&times;</button>
-      </div>
-      <form id="account-form" onsubmit="handleAccountSubmit(event)">
-        <input type="hidden" id="form-account-id">
-
-        <!-- Card 1: Credentials -->
-        <div class="form-group-card">
-          <div class="form-group-card-header">
-            <span class="form-group-card-title">🔑 Account Credentials</span>
-          </div>
-
-          <div class="form-group">
-            <label for="form-phone">Ghana Phone Number</label>
-            <input type="text" id="form-phone" placeholder="0501234567 or 501234567" required autocomplete="username">
-            <span class="form-hint">Leading zero or country code will be formatted automatically.</span>
-          </div>
-
-          <div class="form-group">
-            <label for="form-password">Account Password</label>
-            <input type="password" id="form-password" placeholder="Ace775 account password" autocomplete="current-password">
-          </div>
-
-          <div class="form-group">
-            <label for="form-label">Account Label / Friendly Name</label>
-            <input type="text" id="form-label" placeholder="e.g. John VIP4 or Main Account">
-          </div>
-        </div>
-
-        <!-- Card 2: Execution & Limits -->
-        <div class="form-group-card">
-          <div class="form-group-card-header">
-            <span class="form-group-card-title">⚡ Execution & Limits</span>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label for="form-mode">Execution Mode</label>
-              <select id="form-mode">
-                <option value="api" selected>API Mode (High Speed)</option>
-                <option value="browser">Browser Mode (Playwright)</option>
-              </select>
-            </div>
-            <div class="form-group flex-1">
-              <label for="form-max-tasks">Task Cap</label>
-              <input type="number" id="form-max-tasks" min="0" value="0" placeholder="0 = All tasks">
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="toggle-switch-wrapper">
-              <input type="checkbox" id="form-enabled" checked class="toggle-switch-input">
-              <span class="toggle-switch-slider"></span>
-              <span class="toggle-switch-text">
-                <strong>Enable this account</strong>
-                <small>Active in automated daily rotation</small>
-              </span>
-            </label>
-          </div>
-        </div>
-
-        <!-- Card 2b: Task Window (GMT) -->
-        <div class="form-group-card">
-          <div class="form-group-card-header">
-            <span class="form-group-card-title">Task Window (GMT)</span>
-          </div>
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label for="form-window-start">Window Start</label>
-              <input type="time" id="form-window-start">
-              <span class="form-hint">Blank = use the default window.</span>
-            </div>
-            <div class="form-group flex-1">
-              <label for="form-window-end">Window End</label>
-              <input type="time" id="form-window-end">
-              <span class="form-hint">The run must finish inside it.</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Card 3: Auto-Withdrawal Configuration -->
-        <div class="form-group-card" id="card-auto-withdraw-group">
-          <div class="form-group-card-header">
-            <span class="form-group-card-title">💸 Auto-Withdrawal</span>
-            <label class="toggle-switch-wrapper toggle-compact" title="Toggle Auto-Withdrawal">
-              <input type="checkbox" id="form-auto-withdraw" class="toggle-switch-input" onchange="toggleAutoWithdrawFields()">
-              <span class="toggle-switch-slider"></span>
-            </label>
-          </div>
-
-          <div class="auto-withdraw-status-banner status-disabled" id="auto-withdraw-status-desc">
-            <span class="status-dot-subdued"></span>
-            <span><strong>Auto-withdraw: Disabled</strong> (Toggle switch to schedule automated payouts)</span>
-          </div>
-
-          <div id="auto-withdraw-fields" class="auto-withdraw-fields disabled">
-            <div class="form-row">
-              <div class="form-group flex-1">
-                <label for="form-withdraw-amount">Fixed Auto-Payout Amount (GHS)</label>
-                <select id="form-withdraw-amount" onchange="syncFormWithdrawPills(this.value)">
-                  <option value="0">Full Balance / Auto (Default)</option>
-                  <option value="65">65 GHS</option>
-                  <option value="170">170 GHS</option>
-                  <option value="525">525 GHS</option>
-                  <option value="1600">1,600 GHS</option>
-                  <option value="4500">4,500 GHS</option>
-                  <option value="14000">14,000 GHS</option>
-                  <option value="33500">33,500 GHS</option>
-                  <option value="65000">65,000 GHS</option>
-                  <option value="150000">150,000 GHS</option>
-                  <option value="200000">200,000 GHS</option>
-                  <option value="500000">500,000 GHS</option>
-                  <option value="1000000">1,000,000 GHS</option>
-                </select>
-                <div class="quick-amounts-grid" id="form-withdraw-pills-grid">
-                  <button type="button" class="amount-pill active" onclick="selectFormWithdrawAmount(0)">Full Bal</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(65)">65</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(170)">170</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(525)">525</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(1600)">1600</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(4500)">4500</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(14000)">14000</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(33500)">33500</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(65000)">65000</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(150000)">150000</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(200000)">200000</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(500000)">500000</button>
-                  <button type="button" class="amount-pill" onclick="selectFormWithdrawAmount(1000000)">1000000</button>
-                </div>
-              </div>
-              <div class="form-group flex-1">
-                <label for="form-withdraw-wallet">Wallet Source</label>
-                <select id="form-withdraw-wallet">
-                  <option value="2">Income / Commission (Default)</option>
-                  <option value="1">Personal Wallet</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="form-pay-password">Transaction PIN / Pay Password</label>
-              <input type="password" id="form-pay-password" placeholder="6-digit PIN or payment password" autocomplete="new-password">
-              <span class="form-hint">Stored encrypted. Required by Ace775 to submit withdrawals to your bound MoMo.</span>
-            </div>
-          </div>
-        </div>
-
-        <div id="account-verify-status" class="verify-status-banner" style="display:none;"></div>
-
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" onclick="closeAccountModal()">Cancel</button>
-          <button type="button" class="btn btn-secondary" onclick="testAccountLogins()" id="btn-test-login">
-            <span class="btn-icon">🔍</span> Test Logins
-          </button>
-          <button type="submit" class="btn btn-primary" id="btn-save-account">
-            <span class="btn-icon">💾</span> Verify & Save
-          </button>
-        </div>
-      </form>
+      </main>
     </div>
   </div>
 
-  <!-- Modal: Run History & Audit Log -->
-  <div class="modal-overlay" id="history-modal">
-    <div class="modal-card modal-card-wide modal-history">
-      <div class="modal-header">
-        <div class="modal-title-group">
-          <h3 id="history-modal-title">Execution Audit History</h3>
-          <span class="badge badge-count" id="badge-history-count">0</span>
-        </div>
-        <button class="modal-close" onclick="closeHistoryModal()">&times;</button>
-      </div>
-      <div class="history-table-wrapper">
-        <table class="history-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Account</th>
-              <th>Status</th>
-              <th>Tasks</th>
-              <th>Profit</th>
-              <th>Wallet Balance</th>
-            </tr>
-          </thead>
-          <tbody id="history-table-body">
-            <tr><td colspan="6" class="table-empty">Loading history records...</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" onclick="closeHistoryModal()">Close</button>
-      </div>
-    </div>
-  </div>
+  <div class="scrim" id="scrim"></div>
+  <div id="modal-root"></div>
+  <div class="toasts" id="toasts"></div>
 
-  <!-- Modal: CSV Account Import -->
-  <div class="modal-overlay" id="import-modal">
-    <div class="modal-card modal-import">
-      <div class="modal-header">
-        <h3>Batch Account Import (CSV)</h3>
-        <button class="modal-close" onclick="closeImportModal()">&times;</button>
-      </div>
-      <form id="import-form" onsubmit="handleCsvImport(event)">
-        <p class="import-instructions">
-          Paste comma-separated rows below, or upload a <code>.csv</code> file.
-          <br><strong>Format:</strong> <code>phone,password,label,mode,max_tasks</code>
-          <br><small style="color:var(--text-dim)">(label, mode, max_tasks are optional)</small>
-        </p>
-        <div class="form-group" style="margin-top:12px;">
-          <input type="file" id="csv-file-input" accept=".csv,.txt" onchange="handleCsvFileUpload(event)">
-        </div>
-        <div class="form-group">
-          <label for="csv-textarea">CSV Content</label>
-          <textarea id="csv-textarea" rows="6" class="code-textarea" placeholder="509295199,secretpass,Account 1,api,0&#10;501234567,otherpass,User 2,api,0" required></textarea>
-        </div>
-        <div id="import-status-banner" class="verify-status-banner" style="display:none;"></div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="btn-submit-import">
-            <span class="btn-icon">⚡</span> Verify & Import All
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Modal: Manual Withdrawal -->
-  <div class="modal-overlay" id="withdraw-modal">
-    <div class="modal-card modal-withdraw">
-      <div class="modal-header">
-        <h3 id="withdraw-modal-title">Request Withdrawal</h3>
-        <button class="modal-close" onclick="closeWithdrawModal()">&times;</button>
-      </div>
-      <form id="withdraw-form" onsubmit="handleManualWithdrawSubmit(event)">
-        <input type="hidden" id="withdraw-acc-id">
-        <div class="withdraw-info-box">
-          <div class="withdraw-info-row">
-            <span>Account:</span>
-            <strong id="withdraw-account-label">-</strong>
-          </div>
-          <div class="withdraw-info-row">
-            <span>Available Balance:</span>
-            <strong id="withdraw-account-balance" style="color:var(--success);">0.00 GHS</strong>
-          </div>
-          <div class="withdraw-info-row">
-            <span>Platform Window:</span>
-            <strong style="color:var(--accent-cyan);">09:00 - 17:00 (Once Daily)</strong>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="withdraw-modal-amount">Select Allowed Fixed Amount (GHS)</label>
-          <select id="withdraw-modal-amount" onchange="syncWithdrawPills(this.value)">
-            <option value="65" selected>65 GHS</option>
-            <option value="170">170 GHS</option>
-            <option value="525">525 GHS</option>
-            <option value="1600">1,600 GHS</option>
-            <option value="4500">4,500 GHS</option>
-            <option value="14000">14,000 GHS</option>
-            <option value="33500">33,500 GHS</option>
-            <option value="65000">65,000 GHS</option>
-            <option value="150000">150,000 GHS</option>
-            <option value="200000">200,000 GHS</option>
-            <option value="500000">500,000 GHS</option>
-            <option value="1000000">1,000,000 GHS</option>
-          </select>
-          <div class="quick-amounts-grid" id="withdraw-pills-grid">
-            <button type="button" class="amount-pill active" onclick="selectWithdrawAmount(65)">65</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(170)">170</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(525)">525</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(1600)">1600</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(4500)">4500</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(14000)">14000</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(33500)">33500</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(65000)">65000</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(150000)">150000</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(200000)">200000</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(500000)">500000</button>
-            <button type="button" class="amount-pill" onclick="selectWithdrawAmount(1000000)">1000000</button>
-          </div>
-          <span class="form-hint">Tap any denomination to select. Ace775 rejects custom amounts.</span>
-        </div>
-
-        <div class="form-group">
-          <label for="withdraw-modal-wallet">Payout Wallet</label>
-          <select id="withdraw-modal-wallet">
-            <option value="2">Income / Commission Wallet (Default)</option>
-            <option value="1">Personal Wallet</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="withdraw-modal-pin">Transaction PIN / Pay Password</label>
-          <input type="password" id="withdraw-modal-pin" placeholder="Enter payment password" required autocomplete="current-password">
-          <span class="form-hint">Required by Ace775 to verify payout to your bound MoMo account.</span>
-        </div>
-
-        <div id="withdraw-status-banner" class="verify-status-banner" style="display:none;"></div>
-
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" onclick="closeWithdrawModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="btn-submit-withdraw">
-            <span class="btn-icon">💸</span> Confirm & Submit Withdrawal
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Master ES Module Entry Point -->
-  <script type="module" src="/static/js/dashboard.js?v=4.0"></script>
-  <script type="module" src="/static/js/toasts.js?v=4.0"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/shell.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/account-row.js"></script>
+  <script src="js/terminal-stream.js"></script>
+  <script src="js/pages/overview.js"></script>
+  <script src="js/boot.js"></script>
 </body>
 </html>

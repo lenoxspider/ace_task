@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-density="compact">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Withdrawals · Ace775 Command Center</title>
+  <meta name="description" content="Payout queue, anti-clustering pacing and auto-withdrawal rules.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+<body data-page="withdrawals">
+
+  <div class="app" id="app">
+    <aside class="rail" id="rail-mount"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar-mount"></header>
+      <div class="previewstrip" id="preview-strip"><span data-preview-icon></span><span data-preview-text>Sample data — connect the app server to see live data.</span></div>
+
+      <main class="page">
+        <div class="pagehead">
+          <div class="pagehead__title">
+            <span class="eyebrow">Payouts</span>
+            <h1>Withdrawals</h1>
+            <p>Monitor wallet balances, submit fixed-denomination payouts and review the anti-clustering queue.</p>
+          </div>
+          <div class="pagehead__actions">
+            <button class="btn btn--primary" id="btn-withdraw"><span data-i="cash"></span> Request withdrawal</button>
+          </div>
+        </div>
+
+        <div class="notice notice--accent">
+          <span data-i="clock"></span>
+          <div>
+            <b>Withdrawal window — 09:00 to 17:00, Monday to Friday (GMT)</b>
+            <p>One payout per account per calendar day to the bound Mobile Money number. Weekends are closed. Ace775 accepts fixed denominations only; successful submissions are spaced out to avoid clustering.</p>
+          </div>
+        </div>
+
+        <!-- Queue -->
+        <section class="panel">
+          <div class="panel__head">
+            <div class="panel__title"><h2>Live payout queue</h2><span class="badge badge--accent" id="queue-count">0 pending</span></div>
+            <div class="panel__tools">
+              <span class="dim" id="queue-meta" style="font-size:var(--fs-xs)"></span>
+              <button class="btn btn--sm" id="btn-queue-refresh"><span data-i="refresh"></span> Refresh</button>
+            </div>
+          </div>
+          <div class="tablewrap">
+            <table class="table">
+              <thead><tr>
+                <th>Queue</th><th>Account</th><th class="t-right">Amount</th><th>Status</th>
+                <th>Scheduled slot</th><th>Details</th><th class="t-right">Action</th>
+              </tr></thead>
+              <tbody id="queue-rows"><tr><td colspan="7" class="table__empty">Loading queue…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Auto-withdrawal rule -->
+        <section class="panel">
+          <div class="panel__head">
+            <div class="panel__title"><h2>Auto-withdrawal rule</h2><span class="badge">fixed amounts only</span></div>
+          </div>
+          <div class="panel__body stack" style="gap:var(--s4)">
+            <div class="formgrid">
+              <div class="field">
+                <label for="cfg-account">Target account</label>
+                <select id="cfg-account"></select>
+                <span class="field__hint" id="cfg-hint">Select an account to load or update its auto-withdrawal rule.</span>
+              </div>
+              <div class="field">
+                <label for="cfg-wallet">Payout wallet</label>
+                <select id="cfg-wallet">
+                  <option value="2">Income / commission (default)</option>
+                  <option value="1">Personal wallet</option>
+                </select>
+                <span class="field__hint">Commissions accumulate in the income wallet.</span>
+              </div>
+            </div>
+
+            <label class="switch">
+              <input type="checkbox" id="cfg-auto">
+              <span class="switch__track"></span>
+              <span class="switch__text"><b>Automatic daily withdrawal</b><small>Requests a payout after tasks finish when the window is open.</small></span>
+            </label>
+
+            <div class="field">
+              <label for="cfg-amount">Fixed payout amount (GHS)</label>
+              <select id="cfg-amount"></select>
+              <div class="amounts" id="cfg-pills" style="margin-top:8px"></div>
+              <span class="field__hint">Exact Ace775 denominations. If the income balance is below the chosen tier it waits quietly until tasks accumulate enough.</span>
+            </div>
+
+            <div class="formgrid">
+              <div class="field">
+                <label for="cfg-pin">Transaction PIN / pay password</label>
+                <input id="cfg-pin" type="password" placeholder="6-digit payment PIN" autocomplete="off">
+                <span class="field__hint">Stored encrypted. Required by Ace775 to pay out to MoMo.</span>
+              </div>
+              <div class="field" style="justify-content:flex-end">
+                <button class="btn" id="cfg-sync"><span data-i="refresh"></span> Sync tiers from Ace775</button>
+              </div>
+            </div>
+
+            <div class="banner" id="cfg-banner"></div>
+
+            <div class="row" style="justify-content:flex-end">
+              <button class="btn btn--primary" id="cfg-save"><span data-i="check"></span> Save rule</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Payout config table -->
+        <section class="panel">
+          <div class="panel__head">
+            <div class="panel__title"><h2>Accounts payout configuration</h2></div>
+          </div>
+          <div class="tablewrap">
+            <table class="table">
+              <thead><tr>
+                <th>Account</th><th class="t-right">Balance</th><th>Auto</th><th class="t-right">Target</th>
+                <th>Last payout</th><th>Status</th><th class="t-right">Action</th>
+              </tr></thead>
+              <tbody id="payout-rows"><tr><td colspan="7" class="table__empty">Loading accounts…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+  <div id="modal-root"></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="js/icons.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/shell.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/pages/withdrawals.js"></script>
+  <script src="js/boot.js"></script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-density="compact">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audit History · Ace775 Command Center</title>
+  <meta name="description" content="Historical execution records, claimed commissions and error diagnostics.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+<body data-page="history">
+
+  <div class="app" id="app">
+    <aside class="rail" id="rail-mount"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar-mount"></header>
+      <div class="previewstrip" id="preview-strip"><span data-preview-icon></span><span data-preview-text>Sample data — connect the app server to see live data.</span></div>
+
+      <main class="page">
+        <div class="pagehead">
+          <div class="pagehead__title">
+            <span class="eyebrow">Records</span>
+            <h1>Audit history</h1>
+            <p>Every recorded run — timestamps, claimed tasks, commission earned and wallet balance at the time (GMT).</p>
+          </div>
+          <div class="pagehead__actions">
+            <button class="btn" id="btn-open-history"><span data-i="scroll"></span> Quick view</button>
+            <button class="btn btn--primary" id="btn-export"><span data-i="download"></span> Export CSV</button>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="toolbar">
+            <div class="field" style="max-width:280px">
+              <select id="history-account" aria-label="Filter by account"><option value="">All accounts</option></select>
+            </div>
+            <span class="badge" id="history-count">0 records</span>
+            <div class="topbar__spacer"></div>
+            <button class="btn btn--sm" id="btn-refresh"><span data-i="refresh"></span> Refresh</button>
+          </div>
+          <div class="tablewrap" style="max-height:calc(100dvh - 300px)">
+            <table class="table">
+              <thead><tr>
+                <th>Timestamp</th><th>Account</th><th>Status</th>
+                <th class="t-right">Tasks</th><th class="t-right">Earned</th><th class="t-right">Balance</th>
+              </tr></thead>
+              <tbody id="history-rows"><tr><td colspan="6" class="table__empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+  <div id="modal-root"></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="js/icons.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/shell.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/pages/history.js"></script>
+  <script src="js/boot.js"></script>
+</body>
+</html>

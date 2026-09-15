@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-density="compact">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Terminal · Ace775 Command Center</title>
+  <meta name="description" content="Real-time execution telemetry and anti-ban pacing logs from the Ace775 automation engine.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+<body data-page="terminal">
+
+  <div class="app" id="app">
+    <aside class="rail" id="rail-mount"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar-mount"></header>
+      <div class="previewstrip" id="preview-strip"><span data-preview-icon></span><span data-preview-text>Sample data — connect the app server to see live data.</span></div>
+
+      <main class="page">
+        <div class="pagehead">
+          <div class="pagehead__title">
+            <span class="eyebrow">Telemetry</span>
+            <h1>Live terminal</h1>
+            <p>Streaming execution events from <span class="mono">/api/logs/stream</span> — logins, task claims, pacing waits and error diagnostics.</p>
+          </div>
+          <div class="pagehead__actions">
+            <button class="btn" id="btn-jump"><span data-i="arrowRight"></span> Jump to latest</button>
+            <button class="btn" id="term-clear"><span data-i="trash"></span> Clear</button>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="toolbar" id="term-toolbar">
+            <div class="tabs" role="tablist" aria-label="Log level">
+              <button data-filter="all" aria-selected="true">All</button>
+              <button data-filter="info" aria-selected="false">Info</button>
+              <button data-filter="success" aria-selected="false">Success</button>
+              <button data-filter="warning" aria-selected="false">Warn</button>
+              <button data-filter="error" aria-selected="false">Error</button>
+            </div>
+            <div class="topbar__spacer"></div>
+            <div class="search" style="max-width:260px">
+              <span data-i="search"></span>
+              <input type="search" id="term-search" placeholder="Search logs…" aria-label="Search logs">
+            </div>
+            <button class="btn btn--sm" id="term-pause" aria-pressed="false"><span data-i="pause"></span> Pause</button>
+            <span class="statuschip"><span class="dot dot--live"></span> Connected</span>
+          </div>
+          <div class="panel__body">
+            <div class="terminal" id="term-full" style="height:calc(100dvh - 260px);min-height:340px"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+  <div id="modal-root"></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="js/icons.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/shell.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/terminal-stream.js"></script>
+  <script src="js/pages/terminal.js"></script>
+  <script src="js/boot.js"></script>
+</body>
+</html>

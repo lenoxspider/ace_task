@@ -84,7 +84,7 @@ def is_authenticated(request: Request) -> bool:
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
     # Allow static assets and public auth endpoints
-    if path.startswith("/static") or path in ["/login", "/api/auth/login", "/api/auth/check", "/favicon.ico"]:
+    if path.startswith(("/static", "/css", "/js")) or path in ["/login", "/api/auth/login", "/api/auth/check", "/favicon.ico"]:
         return await call_next(request)
 
     if not is_authenticated(request):
@@ -557,6 +557,17 @@ def login_view(request: Request):
     return HTMLResponse("<h1>Login page missing</h1>")
 
 
+# Each screen is its own HTML file (modular frontend).
+PAGE_FILES = {
+    "/": "index.html",
+    "/accounts": "accounts.html",
+    "/terminal": "terminal.html",
+    "/history": "history.html",
+    "/withdrawals": "withdrawals.html",
+    "/settings": "settings.html",
+}
+
+
 @app.get("/", response_class=HTMLResponse)
 @app.get("/accounts", response_class=HTMLResponse)
 @app.get("/terminal", response_class=HTMLResponse)
@@ -566,9 +577,9 @@ def login_view(request: Request):
 def dashboard_view(request: Request):
     if not is_authenticated(request):
         return RedirectResponse(url="/login", status_code=302)
-    index_path = os.path.join(STATIC_DIR, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
+    page_path = os.path.join(STATIC_DIR, PAGE_FILES.get(request.url.path, "index.html"))
+    if os.path.exists(page_path):
+        return FileResponse(page_path)
     return HTMLResponse("<h1>Ace775 Dashboard static file missing.</h1>")
 
 
@@ -1578,6 +1589,12 @@ def test_telegram_api(data: TelegramTestRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+
+# Serve the modular frontend from the site root (/css/*, /js/*, /accounts.html, ...).
+# Registered last so the API and page routes above match first.
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="root")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,207 @@
+/* ============================================================================
+   Ace775 Command Center — Design Tokens
+   Direction: "precision instrument" operations console.
+   Graphite surfaces · signal-mint accent · hairline rules · mono numerals.
+   ========================================================================== */
+
+:root {
+  /* ---- Type families ---------------------------------------------------- */
+  --font-display: "Sora", "IBM Plex Sans", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* ---- Type scale (rem) ------------------------------------------------- */
+  --fs-display: clamp(1.45rem, 1.15rem + 1.1vw, 1.85rem);
+  --fs-h1: 1.28rem;
+  --fs-h2: 1.02rem;
+  --fs-h3: 0.92rem;
+  --fs-body: 0.875rem;
+  --fs-sm: 0.8rem;
+  --fs-xs: 0.73rem;
+  --fs-micro: 0.66rem;
+
+  --lh-tight: 1.2;
+  --lh-normal: 1.5;
+  --lh-loose: 1.65;
+
+  --tracking-micro: 0.09em;
+  --tracking-tight: -0.015em;
+
+  /* ---- Spacing (4px base) ---------------------------------------------- */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s7: 32px;
+  --s8: 40px;
+  --s9: 56px;
+  --s10: 72px;
+
+  /* ---- Radii ------------------------------------------------------------ */
+  --r-xs: 5px;
+  --r-sm: 8px;
+  --r-md: 11px;
+  --r-lg: 15px;
+  --r-pill: 999px;
+
+  /* ---- Motion ----------------------------------------------------------- */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur-fast: 110ms;
+  --dur: 190ms;
+  --dur-slow: 320ms;
+
+  /* ---- Layout ----------------------------------------------------------- */
+  --rail-w: 250px;
+  --rail-w-collapsed: 74px;
+  --topbar-h: 58px;
+  --content-max: 1520px;
+  --z-rail: 40;
+  --z-topbar: 30;
+  --z-drawer: 60;
+  --z-modal: 80;
+  --z-toast: 90;
+
+  /* ======================================================================
+     DARK THEME (default)
+     ====================================================================== */
+  color-scheme: dark;
+
+  --ink-1000: #070A0E;
+  --ink-950: #0A0E13;
+  --ink-900: #0D1219;   /* page */
+  --ink-850: #111823;   /* rail */
+  --ink-800: #141C27;   /* panel */
+  --ink-750: #19222F;   /* raised */
+  --ink-700: #1F2A38;   /* hover */
+
+  --line: rgba(255, 255, 255, 0.075);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --line-accent: rgba(79, 224, 160, 0.32);
+
+  --txt: #E8EDF4;
+  --txt-2: #A6B1C0;
+  --txt-3: #6D7889;
+  --txt-inverse: #07110C;
+
+  /* Signal accent — "live / earning / primary action" */
+  --accent: #4FE0A0;
+  --accent-2: #7BEBB8;
+  --accent-ink: #062318;
+  --accent-soft: rgba(79, 224, 160, 0.13);
+  --accent-line: rgba(79, 224, 160, 0.34);
+
+  /* Status */
+  --ok: #4FE0A0;
+  --ok-soft: rgba(79, 224, 160, 0.13);
+  --warn: #F3B14E;
+  --warn-soft: rgba(243, 177, 78, 0.14);
+  --err: #FF7A85;
+  --err-soft: rgba(255, 122, 133, 0.14);
+  --info: #5BB8FF;
+  --info-soft: rgba(91, 184, 255, 0.14);
+  --violet: #B39DFF;
+  --violet-soft: rgba(179, 157, 255, 0.15);
+
+  --panel: var(--ink-800);
+  --panel-2: var(--ink-850);
+  --overlay: rgba(6, 9, 13, 0.72);
+
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 24px 60px rgba(0, 0, 0, 0.6);
+  --focus: 0 0 0 3px rgba(79, 224, 160, 0.35);
+
+  --grid-line: rgba(255, 255, 255, 0.022);
+}
+
+/* ======================================================================
+   LIGHT THEME
+   ====================================================================== */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --ink-1000: #E9EDF3;
+  --ink-950: #F1F4F8;
+  --ink-900: #F5F7FA;
+  --ink-850: #FFFFFF;
+  --ink-800: #FFFFFF;
+  --ink-750: #F7F9FC;
+  --ink-700: #EEF2F7;
+
+  --line: rgba(16, 24, 40, 0.10);
+  --line-strong: rgba(16, 24, 40, 0.18);
+  --line-accent: rgba(14, 159, 110, 0.35);
+
+  --txt: #0F1720;
+  --txt-2: #4A5766;
+  --txt-3: #7A8798;
+  --txt-inverse: #FFFFFF;
+
+  --accent: #0E9F6E;
+  --accent-2: #0B8A5F;
+  --accent-ink: #FFFFFF;
+  --accent-soft: rgba(14, 159, 110, 0.10);
+  --accent-line: rgba(14, 159, 110, 0.30);
+
+  --ok: #0E9F6E;
+  --ok-soft: rgba(14, 159, 110, 0.10);
+  --warn: #B7791F;
+  --warn-soft: rgba(183, 121, 31, 0.12);
+  --err: #D6455A;
+  --err-soft: rgba(214, 69, 90, 0.10);
+  --info: #1E7FD6;
+  --info-soft: rgba(30, 127, 214, 0.10);
+  --violet: #6D4FD6;
+  --violet-soft: rgba(109, 79, 214, 0.10);
+
+  --panel: var(--ink-800);
+  --panel-2: #F7F9FC;
+  --overlay: rgba(15, 23, 32, 0.42);
+
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-2: 0 8px 24px rgba(16, 24, 40, 0.10);
+  --shadow-3: 0 24px 56px rgba(16, 24, 40, 0.18);
+  --focus: 0 0 0 3px rgba(14, 159, 110, 0.28);
+
+  --grid-line: rgba(16, 24, 40, 0.03);
+}
+
+/* ======================================================================
+   HIGH CONTRAST (accessibility tier)
+   ====================================================================== */
+[data-contrast="high"] {
+  --line: rgba(255, 255, 255, 0.28);
+  --line-strong: rgba(255, 255, 255, 0.5);
+  --txt: #FFFFFF;
+  --txt-2: #D8DEE7;
+  --txt-3: #AEB8C6;
+  --accent: #38FFB0;
+  --accent-2: #6BFFC6;
+  --focus: 0 0 0 3px #38FFB0;
+}
+[data-theme="light"][data-contrast="high"] {
+  --line: rgba(0, 0, 0, 0.45);
+  --line-strong: rgba(0, 0, 0, 0.7);
+  --txt: #000000;
+  --txt-2: #1A1A1A;
+  --txt-3: #3A3A3A;
+  --accent: #005C3C;
+  --focus: 0 0 0 3px #005C3C;
+}
+
+/* ======================================================================
+   DENSITY SCALE — toggled on <html data-density="...">
+   ====================================================================== */
+[data-density="comfortable"] {
+  --density-row: 56px;
+  --density-pad: var(--s5);
+  --density-gap: var(--s5);
+}
+:root,
+[data-density="compact"] {
+  --density-row: 46px;
+  --density-pad: var(--s4);
+  --density-gap: var(--s4);
+}

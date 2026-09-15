@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-density="compact">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accounts · Ace775 Command Center</title>
+  <meta name="description" content="Manage Ace775 automation accounts — credentials, limits, task windows and rotation.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+<body data-page="accounts">
+
+  <div class="app" id="app">
+    <aside class="rail" id="rail-mount"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar-mount"></header>
+      <div class="previewstrip" id="preview-strip"><span data-preview-icon></span><span data-preview-text>Sample data — connect the app server to see live data.</span></div>
+
+      <main class="page">
+        <div class="pagehead">
+          <div class="pagehead__title">
+            <span class="eyebrow">Fleet</span>
+            <h1>Accounts</h1>
+            <p>Manage credentials, VIP tiers, task windows and one-tap pause / resume controls for every account in rotation.</p>
+          </div>
+          <div class="pagehead__actions">
+            <button class="btn" id="btn-import"><span data-i="upload"></span> Import CSV</button>
+            <button class="btn" id="btn-add"><span data-i="plus"></span> Add account</button>
+            <button class="btn btn--primary" id="btn-run-all"><span data-i="play"></span> Run all active</button>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="toolbar">
+            <div class="tabs" role="tablist" aria-label="Status filter">
+              <button data-filter="all" aria-selected="true">All <span class="count" data-count="all">0</span></button>
+              <button data-filter="active" aria-selected="false">Active <span class="count" data-count="active">0</span></button>
+              <button data-filter="paused" aria-selected="false">Paused <span class="count" data-count="paused">0</span></button>
+              <button data-filter="running" aria-selected="false">Running <span class="count" data-count="running">0</span></button>
+            </div>
+            <div class="search">
+              <span data-i="search"></span>
+              <input type="search" id="account-search" placeholder="Search phone or label…" aria-label="Search accounts">
+            </div>
+          </div>
+          <div id="accounts-list">
+            <div class="skeleton skeleton--line" style="margin:16px"></div>
+            <div class="skeleton skeleton--line" style="margin:16px"></div>
+            <div class="skeleton skeleton--line" style="margin:16px"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+  <div id="modal-root"></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="js/icons.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/shell.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/account-row.js"></script>
+  <script src="js/pages/accounts.js"></script>
+  <script src="js/boot.js"></script>
+</body>
+</html>
