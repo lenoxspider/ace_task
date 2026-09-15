@@ -173,6 +173,17 @@ def init_db():
             result_message TEXT DEFAULT ''
         )
     """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS daily_task_schedule (
+            account_id INTEGER PRIMARY KEY,
+            label TEXT DEFAULT '',
+            phone TEXT NOT NULL,
+            scheduled_time TEXT NOT NULL,
+            status TEXT DEFAULT 'scheduled',
+            date TEXT NOT NULL
+        )
+    """)
     conn.commit()
 
     # Seed initial settings
@@ -883,6 +894,77 @@ def get_withdrawal_queue(limit: int = 50) -> List[Dict[str, Any]]:
     for r in rows:
         r["pay_password"] = "••••••" if r.get("pay_password") else ""
     return rows
+
+
+# ==============================================================================
+# Persistent Daily Task Schedule Engine
+# ==============================================================================
+def save_daily_task_schedule(schedule_items: List[Dict[str, Any]], date_str: str):
+    """Persists today's generated task timeline into SQLite so restarts retain slots."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM daily_task_schedule WHERE date != ?", (date_str,))
+        for item in schedule_items:
+            cursor.execute("""
+                INSERT INTO daily_task_schedule (account_id, label, phone, scheduled_time, status, date)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(account_id) DO UPDATE SET
+                    label=excluded.label,
+                    phone=excluded.phone,
+                    scheduled_time=excluded.scheduled_time,
+                    status=excluded.status,
+                    date=excluded.date
+            """, (
+                int(item["account_id"]),
+                item.get("label", ""),
+                item["phone"],
+                item["scheduled_time"],
+                item.get("status", "scheduled"),
+                date_str
+            ))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_daily_task_schedule(date_str: str) -> List[Dict[str, Any]]:
+    """Retrieves persisted task execution schedule for the specified date."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT account_id, label, phone, scheduled_time, status, date
+            FROM daily_task_schedule
+            WHERE date = ?
+            ORDER BY scheduled_time ASC
+        """, (date_str,))
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def update_daily_task_slot_status(account_id: int, status: str):
+    """Updates the execution status of an account slot in the persistent schedule."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE daily_task_schedule SET status = ? WHERE account_id = ?", (status, account_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def clear_daily_task_schedule():
+    """Cleans up the daily schedule table."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM daily_task_schedule")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 init_db()

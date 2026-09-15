@@ -83,8 +83,14 @@ class TelegramCommandBot:
                 )
                 return
 
+            # Ensure schedule is populated or restored from db
             sched_status = scheduler.get_status()
             task_slots = sched_status.get("daily_task_schedule", [])
+            if not task_slots:
+                scheduler.ensure_schedule()
+                sched_status = scheduler.get_status()
+                task_slots = sched_status.get("daily_task_schedule", [])
+
             q_items = db.get_withdrawal_queue()
 
             lines = [
@@ -96,7 +102,38 @@ class TelegramCommandBot:
             # 1. Tasks section
             lines.append("🤖 <b>Automated Tasks Timeline (Pattern-Free):</b>")
             if not task_slots:
-                lines.append("  <i>No active task slots allocated yet today.</i>")
+                midnight_enabled = db.get_setting("midnight_scheduler_enabled", "1") == "1"
+                accounts = db.get_accounts()
+                active_accounts = [a for a in accounts if a.get("enabled", 1)]
+
+                completed_today = []
+                for a in active_accounts:
+                    last_run = a.get("last_run_time") or ""
+                    status = (a.get("last_status") or "").lower()
+                    target_tasks = int(a.get("max_tasks") or 0)
+                    tasks_done = int(a.get("tasks_done_today") or 0)
+                    if target_tasks > 0:
+                        is_done = ("completed" in status or tasks_done >= target_tasks)
+                    else:
+                        is_done = ("completed" in status)
+                    if last_run.startswith(today_str) and is_done:
+                        completed_today.append(a)
+
+                if not midnight_enabled:
+                    lines.append("  <i>⚠️ Pattern-Free Scheduler is currently disabled in Settings.</i>")
+                elif not active_accounts:
+                    lines.append("  <i>ℹ️ No active accounts configured. Add or enable accounts in the dashboard.</i>")
+                elif completed_today and len(completed_today) == len(active_accounts):
+                    lines.append("  <b>✅ All active accounts have already completed today's tasks:</b>")
+                    for a in completed_today:
+                        lbl = a.get("label") or a["phone"]
+                        t_done = a.get("tasks_done_today", 0)
+                        last_t = (a.get("last_run_time") or "")[11:16]
+                        lines.append(f"    • {lbl} — Completed ({t_done} tasks done at {last_t})")
+                elif now.hour >= 17:
+                    lines.append("  <i>🌙 Operational window (09:00 - 17:00) has closed for today.</i>")
+                else:
+                    lines.append("  <i>No active task slots allocated yet today. Type /run to execute immediately.</i>")
             else:
                 sorted_slots = sorted(task_slots, key=lambda x: x.get("scheduled_time", ""))
                 for s in sorted_slots:
@@ -135,7 +172,7 @@ class TelegramCommandBot:
             lines.extend([
                 "",
                 "ℹ️ <b>Operating Hours:</b>",
-                "• <b>Tasks:</b> Mon - Sat, 24/7 anytime (Randomized anti-pattern intervals)",
+                "• <b>Tasks:</b> Mon - Sat, 09:00 - 17:00 (Randomized anti-pattern intervals)",
                 "• <b>Withdrawals:</b> Mon - Fri, 09:00 - 17:00 (Randomized anti-clustering)"
             ])
 

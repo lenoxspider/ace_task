@@ -37,6 +37,27 @@ class SmartScheduler:
         self.last_briefing_date: Optional[str] = None
         self.last_evening_digest_date: Optional[str] = None
 
+        # Restore today's task schedule from persistent database if previously generated
+        try:
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            saved = db.get_daily_task_schedule(today_str)
+            if saved:
+                for item in saved:
+                    self.daily_task_schedule[item["account_id"]] = item
+                self.last_task_schedule_date = today_str
+                self.last_briefing_date = today_str
+                logger.info(f"Loaded {len(saved)} saved task slots from database for {today_str}.")
+        except Exception as e:
+            logger.warning(f"Failed to restore saved daily task schedule: {e}")
+
+    def ensure_schedule(self, force_refresh: bool = False):
+        """Public method to dynamically ensure schedule is generated (e.g. for /today command)."""
+        now = datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+        if force_refresh:
+            self.last_task_schedule_date = None
+        self._ensure_midnight_task_schedule(now, today_str)
+
     def loop(self):
         logger.info("Smart Auto-Scheduler service started.")
         while self.running:
@@ -219,18 +240,22 @@ class SmartScheduler:
 
         self.last_task_schedule_date = today_str
 
+        if self.daily_task_schedule:
+            db.save_daily_task_schedule(list(self.daily_task_schedule.values()), today_str)
+
         if schedule_summary:
             msg = f"🌙 [Midnight Scheduler] Pattern-free task schedule allocated for today: {', '.join(schedule_summary)}."
             logger.info(msg)
             if self.broadcast_callback:
                 self.broadcast_callback(msg, "info")
 
-            # Dispatch Daily Telegram Schedule Briefing once per day
+            # Dispatch Daily Telegram Schedule Briefing once per day (mark only on verified send)
             if self.last_briefing_date != today_str:
-                self.last_briefing_date = today_str
-                self._send_telegram_schedule_briefing(today_str)
+                ok = self._send_telegram_schedule_briefing(today_str)
+                if ok:
+                    self.last_briefing_date = today_str
 
-    def _send_telegram_schedule_briefing(self, today_str: str):
+    def _send_telegram_schedule_briefing(self, today_str: str) -> bool:
         """Sends morning/midnight operations briefing to Telegram."""
         try:
             tg_token = db.get_setting("telegram_token", os.getenv("TELEGRAM_BOT_TOKEN", ""))
@@ -239,10 +264,17 @@ class SmartScheduler:
             reporter = TelegramReporter(bot_token=tg_token, chat_id=tg_chat)
             if reporter.is_configured and self.daily_task_schedule:
                 formatted_date = datetime.strptime(today_str, "%Y-%m-%d").strftime("%A, %b %d, %Y")
-                reporter.send_daily_schedule_briefing(list(self.daily_task_schedule.values()), formatted_date)
-                logger.info(f"📱 Sent daily operations briefing to Telegram for {today_str}.")
+                ok = reporter.send_daily_schedule_briefing(list(self.daily_task_schedule.values()), formatted_date)
+                if ok:
+                    logger.info(f"📱 Sent daily operations briefing to Telegram for {today_str}.")
+                    return True
+                else:
+                    logger.warning(f"Telegram rejected daily schedule briefing for {today_str}.")
+                    return False
         except Exception as e:
             logger.error(f"Failed to dispatch daily Telegram schedule briefing: {e}")
+            return False
+        return False
 
     def _check_evening_digest(self, now: datetime, today_str: str):
         """Dispatches evening financial summary at 18:00 after withdrawal window closes."""
@@ -306,6 +338,7 @@ class SmartScheduler:
         for acc_id, slot_info in list(self.daily_task_schedule.items()):
             if slot_info["status"] == "scheduled" and now_str >= slot_info["scheduled_time"]:
                 slot_info["status"] = "running"
+                db.update_daily_task_slot_status(acc_id, "running")
                 label = slot_info["label"]
                 sched_display = slot_info["scheduled_time"][11:16]
                 msg = f"⏰ [Midnight Scheduler] Slot reached ({sched_display})! Launching daily tasks for '{label}'..."
@@ -317,9 +350,11 @@ class SmartScheduler:
                     try:
                         self.run_single_callback(target_id)
                         info["status"] = "completed"
+                        db.update_daily_task_slot_status(target_id, "completed")
                     except Exception as ex:
                         logger.error(f"Error in scheduled task run for account #{target_id}: {ex}")
                         info["status"] = "failed"
+                        db.update_daily_task_slot_status(target_id, "failed")
 
                 threading.Thread(target=_run_worker, daemon=True).start()
 
