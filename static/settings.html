@@ -48,27 +48,28 @@
               <div class="panel"><div class="panel__body stack" style="gap:var(--s4)">
                 <div>
                   <h2 style="font-size:var(--fs-h2)">Platform operating hours</h2>
-                  <p class="dim" style="font-size:var(--fs-sm);margin-top:4px">Ace775 enforces windows for task submission and payouts. The bot respects them to keep accounts under the radar.</p>
+                  <p class="dim" style="font-size:var(--fs-sm);margin-top:4px">Tasks run Monday to Saturday at any hour. Only payouts are limited to 09:00-17:00, Monday to Friday. The platform is closed on Sundays.</p>
                 </div>
                 <div class="row wrap" style="gap:var(--s2)">
-                  <span class="badge badge--accent">Operating 09:00 â€“ 17:00 Monâ€“Sat</span>
+                  <span class="badge badge--accent">Tasks: Mon-Sat (any hour)</span>
+                  <span class="badge badge--warn">Payouts: Mon-Fri 09:00-17:00</span>
                   <span class="badge">Rest day Sunday</span>
                 </div>
                 <div class="formgrid">
                   <div class="field">
                     <label for="set-time">Auto-schedule start (GMT)</label>
                     <input type="time" id="set-time" value="09:00">
-                    <span class="field__hint">When the scheduler wakes and allocates the day's slots.</span>
+                    <span class="field__hint">Used by the fixed-time batch run. Per-account windows decide each account's actual slot.</span>
                   </div>
                   <div class="field">
                     <label for="set-retry-interval">Retry interval (minutes)</label>
                     <input type="number" id="set-retry-interval" min="5" max="120" value="30">
-                    <span class="field__hint">Wait before re-attempting an "outside working hours" response.</span>
+                    <span class="field__hint">Wait before re-attempting a closed-window response.</span>
                   </div>
                 </div>
                 <label class="switch"><input type="checkbox" id="set-auto-retry" checked>
                   <span class="switch__track"></span>
-                  <span class="switch__text"><b>Auto-retry outside working hours</b><small>Retries any account that hit an outside-hours response.</small></span></label>
+                  <span class="switch__text"><b>Retry closed-window responses</b><small>Safety net only: tasks run at any hour, so this rarely triggers. Covers the Sunday rest day and platform maintenance.</small></span></label>
               </div></div>
             </section>
 

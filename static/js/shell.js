@@ -75,10 +75,10 @@
         '<button class="rail__collapse" id="rail-collapse" title="Collapse rail (Ctrl+B)" aria-label="Collapse navigation">' + Ace.icon("chevronLeft", 15) + '</button>' +
       '</div>' +
 
-      '<div class="opcard" id="opcard" title="Operational window">' +
+      '<div class="opcard" id="opcard" title="Task status">' +
         '<div class="opcard__top"><span class="dot dot--off" id="op-dot"></span>' +
-        '<span class="opcard__state" id="op-state">Checking window…</span></div>' +
-        '<span class="opcard__meta" id="op-window">09:00 – 17:00 Mon–Sat</span>' +
+        '<span class="opcard__state" id="op-state">Checking status</span></div>' +
+        '<span class="opcard__meta" id="op-window">Tasks Mon-Sat, any hour</span>' +
         '<span class="opcard__sub" id="op-sub">Scheduler: —</span>' +
       '</div>' +
 
@@ -125,16 +125,23 @@
       var now = new Date();
       var sunday = now.getUTCDay() === 0;
       var h = now.getUTCHours();
-      var open = !sunday && h >= 9 && h < 17;
+      // Tasks may run Monday to Saturday at ANY hour. Only payouts are limited to
+      // 09:00-17:00 Mon-Fri, so there is no task window to be outside of.
+      var payoutOpen = !sunday && now.getUTCDay() !== 6 && h >= 9 && h < 17;
       var label, cls, detail;
       if (sunday) { cls = "dot dot--off"; label = "Sunday rest day"; detail = "Platform closed"; }
       else if (!d.enabled) { cls = "dot dot--off"; label = "Automation disabled"; detail = "Scheduler paused"; }
-      else if (open) { cls = "dot dot--live"; label = "Window open"; detail = d.next_task ? ("Next: " + d.next_task.label + " " + String(d.next_task.scheduled_time).slice(11, 16) + "Z") : "Rotation in progress"; }
-      else { cls = "dot dot--wait"; label = "Outside window"; detail = d.retry_at ? ("Retry " + d.retry_at) : "Resumes 09:00 GMT"; }
+      else {
+        cls = "dot dot--live";
+        label = "Tasks open";
+        if (d.next_task) { detail = "Next: " + d.next_task.label + " " + String(d.next_task.scheduled_time).slice(11, 16) + "Z"; }
+        else if (d.retry_at) { detail = "Retry queued " + d.retry_at; }
+        else { detail = payoutOpen ? "Payout window open until 17:00" : "Payouts: Mon-Fri 09:00-17:00"; }
+      }
       dot.className = cls;
       state.textContent = label;
       sub.textContent = detail;
-      if (win) win.textContent = "09:00 – 17:00 Mon–Sat · payout 09:00–17:00 Mon–Fri";
+      if (win) win.textContent = "Tasks Mon-Sat, any hour - payouts 09:00-17:00 Mon-Fri";
       var chip = Ace.qs("#chip-status"), chipTxt = Ace.qs("#chip-status-text");
       if (chip) { chip.title = label + " — " + detail; if (chipTxt) chipTxt.textContent = label; }
       var heroDot = Ace.qs("#status-dot"), heroLabel = Ace.qs("#status-label"), heroDetail = Ace.qs("#status-detail");
