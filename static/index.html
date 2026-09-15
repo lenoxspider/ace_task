@@ -629,6 +629,9 @@
             <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-platform" onclick="switchSettingsTab('tab-platform')">
               <span>🌐</span> Platform Host
             </button>
+            <button type="button" class="settings-nav-btn" role="tab" aria-selected="false" data-tab="tab-system" onclick="switchSettingsTab('tab-system')">
+              <span>v</span> System &amp; Updates
+            </button>
           </nav>
 
           <!-- Right Content Area with Sticky Footer Form -->
@@ -755,6 +758,33 @@
                   <input type="text" id="set-base-url" value="https://ace775.com" required>
                   <span class="form-hint">The target platform host domain for API and Playwright browser automated sessions.</span>
                 </div>
+              </div>
+            </div>
+
+            <!-- Tab 6: System & Updates -->
+            <div class="settings-tab-panel" id="tab-system" role="tabpanel">
+              <div class="settings-card">
+                <h4 class="settings-subhead">Installed Version</h4>
+                <p class="settings-desc">The code revision this host is currently running.</p>
+                <div class="settings-badge-row">
+                  <span class="badge badge-neutral" id="sys-version-commit">loading...</span>
+                  <span class="badge badge-neutral" id="sys-version-branch"></span>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <h4 class="settings-subhead">Pull &amp; Restart</h4>
+                <p class="settings-desc">Fetches the latest code from the repository and restarts the background service so it takes effect. The dashboard disconnects for a few seconds and you will need to log in again.</p>
+                <div class="form-group">
+                  <label for="sys-update-password">Confirm Master Password</label>
+                  <input type="password" id="sys-update-password" autocomplete="current-password" placeholder="Master password">
+                  <span class="form-hint">Required to confirm this action. Updates are refused while a batch run is in progress.</span>
+                </div>
+                <div class="settings-badge-row">
+                  <button type="button" class="btn btn-secondary" id="btn-sys-check" onclick="checkForUpdates()">Check for Updates</button>
+                  <button type="button" class="btn btn-primary" id="btn-sys-update" onclick="runSystemUpdate()">Pull &amp; Restart</button>
+                </div>
+                <pre id="sys-update-output" style="display:none; margin-top:12px; padding:10px; border-radius:8px; background:rgba(0,0,0,0.3); color:var(--text-dim,#c9d1d9); white-space:pre-wrap; font-size:0.78rem; max-height:220px; overflow:auto;"></pre>
               </div>
             </div>
 

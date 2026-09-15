@@ -200,6 +200,22 @@ export const api = {
     return data;
   },
 
+  getSystemVersion: async (check = false) => {
+    const res = await request(`/api/system/version${check ? "?check=true" : ""}`);
+    if (!res.ok) throw new Error("Failed to read the installed version");
+    return res.json();
+  },
+
+  runSystemUpdate: async (payload) => {
+    const res = await request("/api/system/update", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "Update failed");
+    return data;
+  },
+
   logout: async () => {
     try {
       await request("/api/auth/logout", { method: "POST" });

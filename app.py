@@ -13,6 +13,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 import secrets
 import threading
+import subprocess
+import shlex
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -42,7 +44,9 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.middleware("http")
 async def add_no_cache_header(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith("/static/"):
+    # The dashboard is updated in place (see Settings > System & Updates), so never let a
+    # browser hold on to the HTML shells either - only the API responses are left alone.
+    if request.url.path.startswith("/static/") or not request.url.path.startswith("/api"):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -1269,6 +1273,129 @@ def get_active_runs():
         "running_ids": list(RUNNING_ACCOUNT_IDS),
         "is_batch_running": _batch_running()
     }
+
+
+# ==============================================================================
+# System Update (git pull + service restart) - surfaced on the Settings page
+# ==============================================================================
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+_update_lock = threading.Lock()
+
+
+def _git(args, timeout=45):
+    """Run a fixed git command inside the project directory. No user input is interpolated."""
+    return subprocess.run(["git"] + args, cwd=APP_DIR, capture_output=True, text=True, timeout=timeout)
+
+
+def _system_version_info(refresh: bool = False) -> Dict[str, Any]:
+    """Report the revision this host is running, optionally after fetching from origin."""
+    info: Dict[str, Any] = {"branch": "", "commit": "", "subject": "", "date": "",
+                            "ahead": 0, "behind": 0, "dirty": False}
+    try:
+        info["branch"] = _git(["rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip() or "main"
+        info["commit"] = _git(["rev-parse", "--short", "HEAD"]).stdout.strip()
+        last = _git(["log", "-1", "--pretty=%s|%cd", "--date=format:%Y-%m-%d %H:%M"]).stdout.strip()
+        if "|" in last:
+            info["subject"], info["date"] = last.split("|", 1)
+        info["dirty"] = bool(_git(["status", "--porcelain"]).stdout.strip())
+        if refresh:
+            _git(["fetch", "--quiet", "origin", info["branch"]], timeout=60)
+            counts = _git(["rev-list", "--left-right", "--count", "HEAD...@{u}"]).stdout.split()
+            if len(counts) == 2:
+                info["ahead"], info["behind"] = int(counts[0]), int(counts[1])
+    except Exception as exc:
+        info["error"] = str(exc)
+    return info
+
+
+def _schedule_restart() -> bool:
+    """Restart the service without cutting off the in-flight HTTP response.
+
+    A detached shell waits a moment, then asks systemd to restart the unit. If that is not
+    permitted it kills this process instead, and the unit's Restart=always brings it back.
+    Returns False when there is no unit to restart, so the caller can tell the operator to
+    restart it by hand rather than claiming the code was reloaded.
+    """
+    if os.name == "nt":
+        return False
+    try:
+        active = subprocess.run(["systemctl", "is-active", "--quiet", "ace775"], timeout=5).returncode == 0
+    except Exception:
+        active = False
+    if not active:
+        return False
+    app_path = shlex.quote(os.path.join(APP_DIR, "app.py"))
+    cmd = "sleep 2; sudo -n systemctl restart ace775 2>/dev/null || pkill -f %s || true" % app_path
+    try:
+        subprocess.Popen(["bash", "-lc", cmd], cwd=APP_DIR, start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
+
+class SystemUpdateRequest(BaseModel):
+    password: str
+    restart: Optional[bool] = True
+
+
+@app.get("/api/system/version")
+def get_system_version(check: bool = False):
+    """Installed revision, and on request whether origin has newer commits."""
+    return _system_version_info(refresh=check)
+
+
+@app.post("/api/system/update")
+def system_update(item: SystemUpdateRequest):
+    """Pull the latest code from origin and restart the service (Settings page button)."""
+    if not db.verify_dashboard_password(item.password):
+        raise HTTPException(status_code=401, detail="Master password is incorrect.")
+    if _batch_running():
+        raise HTTPException(status_code=409, detail="A batch run is in progress. Wait for it to finish before updating.")
+    if not _update_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="An update is already in progress.")
+    try:
+        branch = _git(["rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip() or "main"
+        before = _git(["rev-parse", "HEAD"]).stdout.strip()
+
+        pull = _git(["pull", "--ff-only", "origin", branch], timeout=120)
+        output = ((pull.stdout or "") + (pull.stderr or "")).strip()
+        if pull.returncode != 0:
+            raise HTTPException(status_code=400, detail="git pull failed:\n" + (output or "unknown error"))
+
+        after = _git(["rev-parse", "HEAD"]).stdout.strip()
+        updated = bool(before and after and before != after)
+        changed = _git(["diff", "--name-only", before, after]).stdout.split() if updated else []
+
+        deps_refreshed = False
+        if "requirements.txt" in changed:
+            try:
+                pip_run = subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "--quiet"],
+                                         cwd=APP_DIR, capture_output=True, text=True, timeout=300)
+                deps_refreshed = pip_run.returncode == 0
+                if not deps_refreshed:
+                    output += "\nDependency install failed:\n" + (pip_run.stderr or "")[-500:]
+            except Exception as exc:
+                output += "\nDependency install error: %s" % exc
+
+        restarting = bool(item.restart) and _schedule_restart()
+        broadcast_log("[SYSTEM] Update requested: %s" % ("pulled new code" if updated else "already up to date"),
+                      "success")
+        return {
+            "success": True,
+            "updated": updated,
+            "output": output or "Already up to date.",
+            "changed_files": changed,
+            "dependencies_refreshed": deps_refreshed,
+            "restarting": restarting,
+            "version": _system_version_info(),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Update failed: %s" % exc)
+    finally:
+        _update_lock.release()
 
 
 @app.get("/api/settings")

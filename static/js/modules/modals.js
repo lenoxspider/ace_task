@@ -956,6 +956,8 @@ export async function loadSettings() {
     if (minTaskSpacing) minTaskSpacing.value = data.min_task_spacing_minutes || "15";
     const maxTaskSpacing = document.getElementById("set-max-task-spacing");
     if (maxTaskSpacing) maxTaskSpacing.value = data.max_task_spacing_minutes || "35";
+
+    loadSystemVersion();
   } catch (err) {
     console.error("Failed to load settings:", err);
   }
@@ -1069,7 +1071,120 @@ export async function testTelegramConnection() {
   }
 }
 
+/* ==============================================================================
+   8. System Version & Update (Settings > System & Updates)
+   ============================================================================== */
+export async function loadSystemVersion(check = false) {
+  const commitEl = document.getElementById("sys-version-commit");
+  const branchEl = document.getElementById("sys-version-branch");
+  try {
+    const data = await api.getSystemVersion(check);
+    if (commitEl) {
+      commitEl.textContent = data.commit
+        ? `${data.commit} - ${data.subject || ""}`.trim()
+        : "unknown revision";
+    }
+    if (branchEl) {
+      const behind = Number(data.behind || 0);
+      const parts = [];
+      if (data.branch) parts.push(data.branch);
+      parts.push(behind > 0 ? `${behind} update(s) available` : "up to date");
+      if (data.dirty) parts.push("local changes present");
+      branchEl.textContent = parts.join(" | ");
+    }
+  } catch (err) {
+    if (commitEl) commitEl.textContent = "unavailable";
+    if (branchEl) branchEl.textContent = "";
+  }
+}
+
+export async function checkForUpdates() {
+  const btn = document.getElementById("btn-sys-check");
+  const orig = btn ? btn.innerHTML : "";
+  if (btn) { btn.disabled = true; btn.innerHTML = "Checking..."; }
+  try {
+    await loadSystemVersion(true);
+    if (window.showToast) window.showToast("Update Check", "Version information refreshed.", "success");
+  } catch (err) {
+    if (window.showToast) window.showToast("Check Failed", err.message, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+function showUpdateOutput(text) {
+  const outEl = document.getElementById("sys-update-output");
+  if (!outEl) return;
+  outEl.style.display = "block";
+  outEl.textContent = text;
+  return outEl;
+}
+
+async function waitForRestart() {
+  const outEl = document.getElementById("sys-update-output");
+  const deadline = Date.now() + 90000;
+  let sawDrop = false;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      const res = await fetch("/api/auth/check", { cache: "no-store" });
+      if (res.ok) {
+        if (sawDrop) { window.location.reload(); return; }
+      }
+    } catch (e) {
+      if (!sawDrop) {
+        sawDrop = true;
+        if (outEl) outEl.textContent += "\nService stopped, waiting for it to come back...";
+      }
+    }
+  }
+  if (outEl) outEl.textContent += "\nService did not report back in time - reload the page to check.";
+}
+
+export async function runSystemUpdate() {
+  const pwdEl = document.getElementById("sys-update-password");
+  const btn = document.getElementById("btn-sys-update");
+  const password = pwdEl ? pwdEl.value.trim() : "";
+
+  if (!password) {
+    if (window.showToast) window.showToast("Password Required", "Enter your master password to confirm.", "warning");
+    return;
+  }
+  if (!window.confirm("Pull the latest code and restart the service? The dashboard will disconnect briefly.")) {
+    return;
+  }
+
+  const orig = btn ? btn.innerHTML : "";
+  if (btn) { btn.disabled = true; btn.innerHTML = "Updating..."; }
+  showUpdateOutput("Running git pull...");
+
+  try {
+    const result = await api.runSystemUpdate({ password: password, restart: true });
+    let text = result.output || "Already up to date.";
+    if (result.dependencies_refreshed) text += "\nDependencies refreshed.";
+    if (result.restarting) text += "\nRestarting the service...";
+    showUpdateOutput(text);
+    if (pwdEl) pwdEl.value = "";
+    appendTerminalLog("[SYSTEM] Update: " + (result.updated ? "new code pulled" : "already up to date"), "success");
+    if (window.showToast) {
+      window.showToast("Update Applied",
+        result.restarting ? "Service is restarting - the dashboard will reconnect shortly." : "Restart the service manually to load any new code.",
+        "success");
+    }
+    if (result.restarting) await waitForRestart();
+  } catch (err) {
+    showUpdateOutput(err.message);
+    appendTerminalLog("[SYSTEM] Update failed: " + err.message, "error");
+    if (window.showToast) window.showToast("Update Failed", err.message, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
 window.switchSettingsTab = switchSettingsTab;
 window.testTelegramConnection = testTelegramConnection;
+window.checkForUpdates = checkForUpdates;
+window.runSystemUpdate = runSystemUpdate;
+window.loadSystemVersion = loadSystemVersion;
 
 
