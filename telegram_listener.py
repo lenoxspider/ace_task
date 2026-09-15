@@ -70,7 +70,7 @@ class TelegramCommandBot:
 
         elif cmd in ["/schedule", "/today", "/timeline"]:
             from scheduler import scheduler
-            now = datetime.now()
+            now = db.utc_now()
             today_str = now.strftime("%Y-%m-%d")
             time_now_str = now.strftime("%H:%M:%S")
 
@@ -181,7 +181,7 @@ class TelegramCommandBot:
         elif cmd in ["/status", "/balance"]:
             stats = db.get_dashboard_stats()
             accounts = db.get_accounts()
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            now = db.utc_now().strftime("%Y-%m-%d %H:%M:%S")
 
             lines = [
                 "📊 <b>Ace775 Status Overview</b>",
@@ -219,7 +219,7 @@ class TelegramCommandBot:
             self.send_message("\n".join(lines))
 
         elif cmd == "/run":
-            if datetime.now().weekday() == 6:
+            if db.utc_now().weekday() == 6:
                 self.send_message("⏸️ <b>Today is Sunday (Rest Day)!</b>\nAce775 platform is closed for tasks on Sundays. Automated runs are suspended for the day.")
                 return
             if self.run_all_callback:

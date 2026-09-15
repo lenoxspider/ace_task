@@ -35,6 +35,12 @@ def _utc_today_str() -> str:
     return _utc_now().strftime("%Y-%m-%d")
 
 
+# Public aliases for other modules (app.py, scheduler.py, telegram_listener.py).
+utc_now = _utc_now
+utc_now_str = _utc_now_str
+utc_today_str = _utc_today_str
+
+
 def normalize_phone(phone: str) -> str:
     """Normalize Ghana phone number to 9 digits (removing leading 0 or +233 prefix)."""
     p = str(phone).strip()
@@ -245,7 +251,7 @@ def init_db():
         env_pwd = os.getenv("ACE_PASSWORD", "").strip()
         if env_phone and env_pwd:
             clean_phone = normalize_phone(env_phone)
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
             cursor.execute("""
                 INSERT OR IGNORE INTO accounts (phone, password, label, mode, max_tasks, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -341,7 +347,7 @@ def get_account(account_id: int, decrypt: bool = True) -> Optional[Dict[str, Any
 def add_account(phone: str, password: str, label: str = "", max_tasks: int = 0, mode: str = "api", enabled: int = 1,
                 auto_withdraw: int = 0, withdraw_amount: float = 0.0, pay_password: str = "", withdraw_wallet: int = 2) -> Dict[str, Any]:
     clean_phone = normalize_phone(phone)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     enc_pwd = encrypt_password(password)
     enc_pay_pwd = encrypt_password(pay_password.strip()) if pay_password and pay_password.strip() else ""
     conn = get_connection()
@@ -419,7 +425,7 @@ def update_account_withdrawal_status(account_id: int, status: str, withdraw_date
             WHERE id = ?
         """, (status, withdraw_date, account_id))
     else:
-        now_date = datetime.now().strftime("%Y-%m-%d")
+        now_date = _utc_now().strftime("%Y-%m-%d")
         cursor.execute("""
             UPDATE accounts
             SET last_withdraw_status = ?, last_withdraw_date = ?
@@ -432,10 +438,10 @@ def update_account_withdrawal_status(account_id: int, status: str, withdraw_date
 def can_withdraw_today(account: Dict[str, Any], enforce_time_window: bool = True) -> Tuple[bool, str]:
     """
     Validates platform rules:
-    1. Withdrawal window is strictly 09:00 to 17:00 (9am to 5pm) local time.
+    1. Withdrawal window is strictly 09:00 to 17:00 (9am to 5pm) GMT.
     2. Withdrawal can only occur once per calendar day per account.
     """
-    now = datetime.now()
+    now = _utc_now()
     if enforce_time_window:
         if now.weekday() in (5, 6):
             return False, "Withdrawals are only permitted Monday through Friday (Platform closed on weekends)."
@@ -726,7 +732,7 @@ def verify_dashboard_password(candidate: str) -> bool:
 def calculate_next_withdrawal_slot(conn: Optional[sqlite3.Connection] = None) -> str:
     """
     Calculates the next available withdrawal slot ensuring:
-    1. Strictly within Ace775 operating window: 09:00 - 17:00 local time.
+    1. Strictly within Ace775 operating window: 09:00 - 17:00 GMT.
     2. Monday - Saturday only (Sundays are skipped as platform rest days).
     3. Randomized spacing between 25 and 50 minutes from the previous scheduled slot.
     4. Random second-level jitter (0 to 59s).
@@ -759,7 +765,7 @@ def calculate_next_withdrawal_slot(conn: Optional[sqlite3.Connection] = None) ->
             LIMIT 1
         """)
         last_row = cursor.fetchone()
-        now = datetime.now()
+        now = _utc_now()
 
         def push_to_next_valid_day(dt: datetime) -> datetime:
             """Ensure date is Mon-Fri between 09:10 and 09:35."""
@@ -823,8 +829,8 @@ def enqueue_withdrawal(account_id: int, phone: str, label: str, amount: float,
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        today_str = datetime.now().strftime("%Y-%m-%d")
+        now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
+        today_str = _utc_now().strftime("%Y-%m-%d")
 
         # 1. Check if account already has an active queue item
         cursor.execute("""
@@ -883,7 +889,7 @@ def enqueue_withdrawal(account_id: int, phone: str, label: str, amount: float,
 
 def get_due_withdrawal() -> Optional[Dict[str, Any]]:
     """Find the next withdrawal ready to execute (now >= scheduled_for, within Mon-Fri 09:00-17:00)."""
-    now = datetime.now()
+    now = _utc_now()
     if now.weekday() in (5, 6):
         return None
     if now.hour < 9 or now.hour >= 17:
@@ -936,7 +942,7 @@ def update_queue_item_status(queue_id: int, status: str, result_message: str = "
     """Update execution state of a withdrawal queue record."""
     conn = get_connection()
     cursor = conn.cursor()
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
     cursor.execute("""
         UPDATE withdrawal_queue
         SET status = ?, result_message = ?, executed_at = ?

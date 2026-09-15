@@ -100,7 +100,7 @@ RUNNING_ACCOUNT_IDS: set = set()
 
 def broadcast_log(message: str, level: str = "info"):
     """Broadcast a log entry to in-memory history and active SSE streams."""
-    timestamp = datetime.now().strftime("%H:%M:%S")
+    timestamp = db.utc_now().strftime("%H:%M:%S")
     entry = {"timestamp": timestamp, "message": message, "level": level}
     log_history.append(entry)
     if len(log_history) > MAX_LOG_HISTORY:
@@ -141,7 +141,7 @@ def run_single_account(account_id: int, force: bool = False):
         return
 
     # Daily Completion Guard: If not explicitly forced, skip accounts that already completed tasks today
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_str = db.utc_now().strftime("%Y-%m-%d")
     last_run = account.get("last_run_time") or ""
     status = (account.get("last_status") or "").lower()
     tasks_today = int(account.get("tasks_done_today") or 0)
@@ -160,7 +160,7 @@ def run_single_account(account_id: int, force: bool = False):
     broadcast_log(f"[ACCOUNT_RUNNING:{account_id}]", "event")
 
     # Sunday Guard: Ace775 platform is closed for tasks on Sundays
-    if datetime.now().weekday() == 6:
+    if db.utc_now().weekday() == 6:
         broadcast_log(f"⏸️ [Sunday Rest Day] '{label}': Ace775 platform is closed on Sundays. Tasks & check-ins are suspended today.", "warning")
         db.update_account_stats(account_id, last_status="Sunday: Rest Day")
         RUNNING_ACCOUNT_IDS.discard(account_id)
@@ -353,7 +353,7 @@ def run_all_enabled_accounts():
         return
 
     # Sunday Guard: Ace775 platform is closed for tasks on Sundays
-    if datetime.now().weekday() == 6:
+    if db.utc_now().weekday() == 6:
         broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Batch automation suspended today.", "warning")
         return
 
@@ -361,7 +361,7 @@ def run_all_enabled_accounts():
     try:
         accounts = db.get_accounts()
         enabled_accounts = [a for a in accounts if a["enabled"]]
-        today_str = datetime.now().strftime("%Y-%m-%d")
+        today_str = db.utc_now().strftime("%Y-%m-%d")
 
         # Skip accounts that have already completed all daily tasks today
         pending_accounts = []
@@ -1170,7 +1170,7 @@ def trigger_single_run(account_id: int, background_tasks: BackgroundTasks):
             "status": "paused",
             "message": f"Account '{label}' is currently PAUSED. Click '▶️ Resume' on the dashboard to re-enable task execution."
         })
-    if datetime.now().weekday() == 6:
+    if db.utc_now().weekday() == 6:
         broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Tasks suspended today.", "warning")
         db.update_account_stats(account_id, last_status="Sunday: Rest Day")
         return {"status": "skipped", "message": "Sunday: Ace775 platform is closed for tasks"}
@@ -1180,7 +1180,7 @@ def trigger_single_run(account_id: int, background_tasks: BackgroundTasks):
 
 @app.post("/api/run-all")
 def trigger_run_all(background_tasks: BackgroundTasks):
-    if datetime.now().weekday() == 6:
+    if db.utc_now().weekday() == 6:
         broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Batch automation suspended today.", "warning")
         return {"status": "skipped", "message": "Sunday: Ace775 platform is closed for tasks"}
     global is_running_lock
@@ -1315,7 +1315,7 @@ def test_telegram_api(data: TelegramTestRequest):
 
     from ace_bot import TelegramReporter
     reporter = TelegramReporter(bot_token=token, chat_id=chat_id)
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = db.utc_now().strftime("%Y-%m-%d %H:%M:%S")
     msg = (
         "<b>🔔 Ace775 Automation Alert</b>\n\n"
         "✅ <b>Telegram Connection Verified!</b>\n"

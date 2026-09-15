@@ -39,7 +39,7 @@ class SmartScheduler:
 
         # Restore today's task schedule from persistent database if previously generated
         try:
-            today_str = datetime.now().strftime("%Y-%m-%d")
+            today_str = db.utc_now().strftime("%Y-%m-%d")
             saved = db.get_daily_task_schedule(today_str)
             if saved:
                 for item in saved:
@@ -52,7 +52,7 @@ class SmartScheduler:
 
     def ensure_schedule(self, force_refresh: bool = False):
         """Public method to dynamically ensure schedule is generated (e.g. for /today command)."""
-        now = datetime.now()
+        now = db.utc_now()
         today_str = now.strftime("%Y-%m-%d")
         if force_refresh:
             self.last_task_schedule_date = None
@@ -69,7 +69,7 @@ class SmartScheduler:
                 retry_interval = int(db.get_setting("retry_interval_minutes", "30"))
                 midnight_enabled = db.get_setting("midnight_scheduler_enabled", "1") == "1"
 
-                now = datetime.now()
+                now = db.utc_now()
                 now_time_str = now.strftime("%H:%M")
                 today_str = now.strftime("%Y-%m-%d")
 
@@ -128,7 +128,7 @@ class SmartScheduler:
     def _run_with_retry_watch(self):
         if not self.run_all_callback:
             return
-        if datetime.now().weekday() == 6:
+        if db.utc_now().weekday() == 6:
             logger.info("⏸️ Auto-Scheduler: Skipping run_all_callback. Today is Sunday (Rest day).")
             self.retry_at = None
             return
@@ -141,8 +141,8 @@ class SmartScheduler:
         accounts = db.get_accounts()
         outside_hours = any("working hours" in (a.get("last_status") or "").lower() for a in accounts if a.get("enabled", 1))
 
-        if outside_hours and auto_retry and datetime.now().weekday() != 6:
-            self.retry_at = datetime.now() + timedelta(minutes=retry_interval)
+        if outside_hours and auto_retry and db.utc_now().weekday() != 6:
+            self.retry_at = db.utc_now() + timedelta(minutes=retry_interval)
             retry_str = self.retry_at.strftime("%H:%M:%S")
             logger.info(f"⏰ Outside working hours detected. Auto-retry scheduled at {retry_str} (in {retry_interval}m).")
         else:
@@ -363,7 +363,7 @@ class SmartScheduler:
 
     def _check_withdrawal_queue(self):
         """Processes any queued withdrawal that is due for execution within 09:00 - 17:00 (Mon-Fri)."""
-        now = datetime.now()
+        now = db.utc_now()
         # Ace775 operates withdrawals strictly Mon-Fri between 09:00 and 17:00
         if now.weekday() in (5, 6):
             return
@@ -501,7 +501,7 @@ class SmartScheduler:
                 break
 
         status_text = "Disabled"
-        if datetime.now().weekday() == 6:
+        if db.utc_now().weekday() == 6:
             status_text = "Sunday: Platform Closed (Rest Day)"
         elif self.retry_at:
             status_text = f"Retrying at {self.retry_at.strftime('%H:%M')}"

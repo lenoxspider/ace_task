@@ -21,7 +21,7 @@ import logging
 import argparse
 import hashlib
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 # Configure clean logging
@@ -33,6 +33,11 @@ logging.basicConfig(
 logger = logging.getLogger("AceBot")
 
 load_dotenv()
+
+
+def _utc_now() -> datetime:
+    """Ace775 runs to GMT working hours, so all 'now' values are UTC."""
+    return datetime.now(timezone.utc)
 
 
 # ==============================================================================
@@ -72,7 +77,7 @@ class TelegramReporter:
             return False
 
     def send_report(self, stats: Dict[str, Any]) -> bool:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
         phone = stats.get("phone", "Unknown")
         mode = stats.get("mode", "browser").upper()
         grade = stats.get("grade", "N/A")
@@ -111,7 +116,7 @@ class TelegramReporter:
     def send_error_alert(self, account_label: str, phone: str, error_msg: str) -> bool:
         if not self.is_configured:
             return False
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
         label = account_label or phone
         lines = [
             "⚠️ <b>Ace775 Task Execution Failure Alert</b>",
@@ -125,7 +130,7 @@ class TelegramReporter:
         return self.send_message("\n".join(lines))
 
     def send_withdrawal_alert(self, account_label: str, phone: str, amount: float, status: str, details: str = "") -> bool:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
         lines = [
             "💸 <b>Ace775 Withdrawal Alert</b>",
             f"📅 <i>{now}</i>",
@@ -174,7 +179,7 @@ class TelegramReporter:
         if not self.is_configured:
             return False
 
-        date_str = summary.get("date_str", datetime.now().strftime("%A, %b %d, %Y"))
+        date_str = summary.get("date_str", _utc_now().strftime("%A, %b %d, %Y"))
         lines = [
             "📊 <b>Ace775 Daily Financial Digest</b>",
             f"📅 <i>{date_str} (Window Closed: 17:00 GMT)</i>",
@@ -215,7 +220,7 @@ class TelegramReporter:
         """Dispatches high-priority alert when an account encounters auth/security/suspension issues."""
         if not self.is_configured:
             return False
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
         lines = [
             "🚨 <b>CRITICAL: Ace775 Account Health Alert</b>",
             f"📅 <i>{now}</i>",
@@ -567,7 +572,7 @@ class AceApiBot:
             )
 
     def do_checkin(self) -> bool:
-        if datetime.now().weekday() == 6:
+        if _utc_now().weekday() == 6:
             logger.info("[API] Today is Sunday. Ace775 check-in is paused (Sunday rest day).")
             self.stats["checkin_status"] = "Skipped (Sunday)"
             return True
@@ -607,7 +612,7 @@ class AceApiBot:
         return False
 
     def do_tasks(self, max_tasks: Optional[int] = None) -> bool:
-        if datetime.now().weekday() == 6:
+        if _utc_now().weekday() == 6:
             logger.info("[API] Today is Sunday. Ace775 platform is closed for tasks (Rest day).")
             self.stats["error"] = "Sunday: Platform tasks suspended (Rest day)"
             return True
@@ -745,7 +750,7 @@ class AceApiBot:
         Submits a withdrawal request to https://ace775.com/api/Withdrawal/apply.
         Enforces 9am - 5pm time window and checks for required parameters.
         """
-        now = datetime.now()
+        now = _utc_now()
         if not bypass_time_window:
             if now.weekday() in (5, 6):
                 err = "Withdrawal rejected: Platform closed on weekends (Withdrawals permitted Monday to Friday only)."
@@ -790,7 +795,7 @@ class AceApiBot:
             return {"success": False, "message": msg}
 
     def run(self, do_checkin: bool = True, do_tasks: bool = True, max_tasks: Optional[int] = None) -> Dict[str, Any]:
-        if datetime.now().weekday() == 6:
+        if _utc_now().weekday() == 6:
             logger.info(f"[API] Sunday detected for {self.phone}: Ace775 platform is closed on Sundays (Rest day). All tasks & checks are suspended.")
             self.stats["checkin_status"] = "Skipped (Sunday)"
             self.stats["error"] = "Sunday: Rest Day (No tasks)"
@@ -837,7 +842,7 @@ class AcePlaywrightBot:
         self._dismiss_popups(page)
 
     def run(self, do_checkin: bool = True, do_tasks: bool = True, max_tasks: Optional[int] = None) -> Dict[str, Any]:
-        if datetime.now().weekday() == 6:
+        if _utc_now().weekday() == 6:
             logger.info(f"[Browser] Sunday detected for {self.phone}: Ace775 platform is closed on Sundays (Rest day).")
             self.stats["checkin_status"] = "Skipped (Sunday)"
             self.stats["error"] = "Sunday: Rest Day (No tasks)"
