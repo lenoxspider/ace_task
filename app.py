@@ -12,6 +12,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 import secrets
+import threading
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -94,8 +95,24 @@ async def auth_middleware(request: Request, call_next):
 MAX_LOG_HISTORY = 300
 log_history: List[Dict[str, Any]] = []
 log_subscribers: List[asyncio.Queue] = []
-is_running_lock = False
 RUNNING_ACCOUNT_IDS: set = set()
+MAIN_LOOP: Optional[asyncio.AbstractEventLoop] = None
+
+# Concurrency guards. Batch runs are serialized, and a single account can never be
+# running in two places at once - the dashboard button, the scheduler and the Telegram
+# listener all funnel into these same functions, on different threads.
+_batch_lock = threading.Lock()
+_account_locks: Dict[int, threading.Lock] = {}
+_account_locks_guard = threading.Lock()
+
+
+def _account_lock(account_id: int) -> threading.Lock:
+    with _account_locks_guard:
+        return _account_locks.setdefault(account_id, threading.Lock())
+
+
+def _batch_running() -> bool:
+    return _batch_lock.locked()
 
 
 def broadcast_log(message: str, level: str = "info"):
@@ -106,11 +123,15 @@ def broadcast_log(message: str, level: str = "info"):
     if len(log_history) > MAX_LOG_HISTORY:
         log_history.pop(0)
 
-    # Dispatch to SSE listeners
+    # Dispatch to SSE listeners. This is called from worker threads too, so hand the
+    # entry to the event loop instead of touching asyncio.Queue from another thread.
     dead_queues = []
     for q in log_subscribers:
         try:
-            q.put_nowait(entry)
+            if MAIN_LOOP is not None and MAIN_LOOP.is_running():
+                MAIN_LOOP.call_soon_threadsafe(q.put_nowait, entry)
+            else:
+                q.put_nowait(entry)
         except Exception:
             dead_queues.append(q)
     for dq in dead_queues:
@@ -122,6 +143,18 @@ def broadcast_log(message: str, level: str = "info"):
 # Execution Workers with Anti-Ban Pacing
 # ==============================================================================
 def run_single_account(account_id: int, force: bool = False):
+    """Public entry point: guarantees one account is never run concurrently twice."""
+    lock = _account_lock(account_id)
+    if not lock.acquire(blocking=False):
+        broadcast_log(f"Account ID {account_id} is already running - duplicate trigger ignored.", "warning")
+        return
+    try:
+        _run_single_account_inner(account_id, force)
+    finally:
+        lock.release()
+
+
+def _run_single_account_inner(account_id: int, force: bool = False):
     account = db.get_account(account_id)
     if not account:
         broadcast_log(f"Account ID {account_id} not found!", "error")
@@ -347,18 +380,15 @@ def run_single_account(account_id: int, force: bool = False):
 
 
 def run_all_enabled_accounts():
-    global is_running_lock
-    if is_running_lock:
+    # Serialize batch runs - dashboard button, scheduler and Telegram all call this.
+    if not _batch_lock.acquire(blocking=False):
         broadcast_log("⚠️ An execution job is already in progress!", "warning")
         return
-
-    # Sunday Guard: Ace775 platform is closed for tasks on Sundays
-    if db.utc_now().weekday() == 6:
-        broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Batch automation suspended today.", "warning")
-        return
-
-    is_running_lock = True
     try:
+        # Sunday Guard: Ace775 platform is closed for tasks on Sundays
+        if db.utc_now().weekday() == 6:
+            broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Batch automation suspended today.", "warning")
+            return
         accounts = db.get_accounts()
         enabled_accounts = [a for a in accounts if a["enabled"]]
         today_str = db.utc_now().strftime("%Y-%m-%d")
@@ -404,7 +434,7 @@ def run_all_enabled_accounts():
 
         broadcast_log("🎉 Batch execution for active accounts finished!", "success")
     finally:
-        is_running_lock = False
+        _batch_lock.release()
 
 
 # Connect callbacks to Scheduler and Telegram Listener
@@ -418,7 +448,9 @@ telegram_bot.run_all_callback = run_all_enabled_accounts
 # Lifecycle & Models
 # ==============================================================================
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
+    global MAIN_LOOP
+    MAIN_LOOP = asyncio.get_running_loop()
     scheduler.start()
     telegram_bot.start()
     broadcast_log("⚡ Ace775 Control Center initialized with Auto-Scheduler and Telegram Listener.", "success")
@@ -1183,8 +1215,7 @@ def trigger_run_all(background_tasks: BackgroundTasks):
     if db.utc_now().weekday() == 6:
         broadcast_log("⏸️ [Sunday Rest Day] Ace775 platform is closed on Sundays. Batch automation suspended today.", "warning")
         return {"status": "skipped", "message": "Sunday: Ace775 platform is closed for tasks"}
-    global is_running_lock
-    if is_running_lock:
+    if _batch_running():
         return JSONResponse(status_code=400, content={"status": "busy", "message": "A job is already running!"})
     background_tasks.add_task(run_all_enabled_accounts)
     return {"status": "started", "message": "Batch execution started in background"}
@@ -1236,7 +1267,7 @@ async def stream_logs(request: Request):
 def get_active_runs():
     return {
         "running_ids": list(RUNNING_ACCOUNT_IDS),
-        "is_batch_running": is_running_lock
+        "is_batch_running": _batch_running()
     }
 
 
