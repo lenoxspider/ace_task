@@ -45,13 +45,13 @@
       </div>
 
       <!-- 2. Live Operational Status Card -->
-      <div class="sidebar-status-card" id="sidebar-op-widget" data-title="Operational Window: 09:00 - 17:00 active">
+      <div class="sidebar-status-card" id="sidebar-op-widget" data-title="Tasks run Mon-Sat at any hour">
         <div class="status-card-header">
           <span class="status-indicator-dot dot-active" id="op-dot"></span>
-          <span class="status-card-state" id="op-state-title">Operational Window</span>
+          <span class="status-card-state" id="op-state-title">Tasks Open</span>
         </div>
         <div class="status-card-details">
-          <span class="status-card-time" id="op-window-hours">09:00 – 17:00 Mon–Sat</span>
+          <span class="status-card-time" id="op-window-hours">Tasks: Mon-Sat, any hour</span>
           <span class="status-card-sub" id="op-sub-info">Scheduler: Active</span>
         </div>
       </div>
@@ -643,20 +643,21 @@
             <div class="settings-tab-panel active" id="tab-hours" role="tabpanel">
               <div class="settings-card">
                 <h4 class="settings-subhead">⏰ Platform Operating Hours & Rest Policy</h4>
-                <p class="settings-desc">Ace775 enforces strict operating windows for both task submissions and withdrawals. The bot respects these operational guards to protect your accounts from detection.</p>
+                <p class="settings-desc">Tasks run Monday to Saturday at any hour. Withdrawals are limited to Monday-Friday 09:00-17:00, and the platform is closed on Sundays.</p>
                 <div class="settings-badge-row">
-                  <span class="badge badge-primary">Operating: Mon – Sat (09:00 – 17:00)</span>
+                  <span class="badge badge-primary">Tasks: Mon-Sat (any hour)</span>
+                  <span class="badge badge-warning">Withdrawals: Mon-Fri (09:00-17:00)</span>
                   <span class="badge badge-neutral">Rest Day: Sunday (Automated Suspension)</span>
                 </div>
               </div>
 
               <div class="settings-card">
-                <h4 class="settings-subhead">🔄 Outside Working Hours Handling</h4>
+                <h4 class="settings-subhead">Closed-Window Response (Safety Net)</h4>
                 <div class="form-group checkbox-group">
                   <label class="checkbox-label">
-                    <input type="checkbox" id="set-auto-retry" checked> Auto-retry when "Outside working hours"
+                    <input type="checkbox" id="set-auto-retry" checked> Retry if the platform reports a closed window
                   </label>
-                  <span class="form-hint">Automatically retries any account task that encountered an outside-hours response.</span>
+                  <span class="form-hint">Safety net only. Tasks are allowed at any hour, so this rarely triggers; it also covers the Sunday rest day and platform maintenance.</span>
                 </div>
 
                 <div class="form-group">

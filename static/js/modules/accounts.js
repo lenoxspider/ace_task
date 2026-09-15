@@ -65,6 +65,14 @@ export function renderAccounts() {
     const lifetimeEarned = Number(acc.total_earned_ghs || 0).toFixed(2);
     const lifetimeTasks = acc.total_tasks_done || 0;
 
+    // Task window (GMT): its own, or the default window it falls back to.
+    const effWindow = acc.effective_window
+      || (acc.window_start && acc.window_end ? `${acc.window_start}-${acc.window_end}` : "");
+    const isDefaultWindow = acc.window_source === "default";
+    const windowBadge = effWindow
+      ? `<span class="badge badge-mode" title="Task window (GMT)${isDefaultWindow ? " - default window" : ""}">WIN ${escapeHtml(effWindow)}${isDefaultWindow ? " (default)" : ""}</span>`
+      : "";
+
     return `
       <div class="account-card ${isPaused ? 'paused-card' : ''} ${isRunning ? 'acc-running' : ''}" id="card-acc-${acc.id}">
         <div class="acc-info-primary">
@@ -76,6 +84,7 @@ export function renderAccounts() {
               <span class="acc-label">${escapeHtml(acc.label || 'Account')}</span>
               <span class="badge badge-vip">${escapeHtml(acc.vip_level || 'VIP')}</span>
               <span class="badge badge-mode">${escapeHtml(acc.mode.toUpperCase())}</span>
+              ${windowBadge}
               ${isPaused 
                 ? `<span class="badge badge-paused" title="Task automation is paused for this account">⏸️ PAUSED</span>` 
                 : `<span class="badge badge-active" title="Task automation is active">ACTIVE</span>`}

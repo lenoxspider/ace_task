@@ -33,7 +33,10 @@ export async function loadSchedulerStatus() {
       const now = new Date();
       const isSunday = now.getDay() === 0;
       const hour = now.getHours();
-      const isWithinHours = !isSunday && (hour >= 9 && hour < 17);
+      // Tasks run Monday to Saturday at ANY hour. Only withdrawals are limited to
+      // 09:00-17:00 (Mon-Fri), so there is no task window to be outside of.
+      const isWeekday = !isSunday && now.getDay() !== 6;
+      const isWithdrawWindow = isWeekday && hour >= 9 && hour < 17;
 
       if (isSunday) {
         opDot.className = "status-indicator-dot dot-closed";
@@ -45,23 +48,24 @@ export async function loadSchedulerStatus() {
         opStateTitle.innerText = "Automation Disabled";
         if (opSubInfo) opSubInfo.innerText = "Task scheduler paused";
         if (opWidget) opWidget.setAttribute("data-title", "Scheduler is disabled in Settings");
-      } else if (isWithinHours) {
-        opDot.className = "status-indicator-dot dot-active";
-        opStateTitle.innerText = "Operational Window Open";
-        if (opSubInfo) {
-          const detail = data.next_task
-            ? `Next: ${data.next_task.label} at ${data.next_task.scheduled_time.slice(11, 16)}`
-            : "Tasks running in rotation";
-          opSubInfo.innerText = detail;
-        }
-        if (opWidget) opWidget.setAttribute("data-title", "Window Open: 09:00 - 17:00 Active");
       } else {
-        opDot.className = "status-indicator-dot dot-waiting";
-        opStateTitle.innerText = "Outside Working Hours";
+        opDot.className = "status-indicator-dot dot-active";
+        opStateTitle.innerText = "Tasks Open";
         if (opSubInfo) {
-          opSubInfo.innerText = data.retry_at ? `Retry at ${data.retry_at}` : "Window resumes 09:00";
+          if (data.next_task) {
+            opSubInfo.innerText = `Next: ${data.next_task.label} at ${data.next_task.scheduled_time.slice(11, 16)}`;
+          } else if (data.retry_at) {
+            opSubInfo.innerText = `Retry queued at ${data.retry_at}`;
+          } else {
+            opSubInfo.innerText = isWithdrawWindow
+              ? "Withdrawal window open (until 17:00)"
+              : "Withdrawals: Mon-Fri 09:00-17:00";
+          }
         }
-        if (opWidget) opWidget.setAttribute("data-title", "Outside Window: Resumes Mon-Sat 09:00");
+        if (opWidget) {
+          opWidget.setAttribute("data-title",
+            `Tasks run Mon-Sat at any hour${isWithdrawWindow ? " - withdrawal window open" : ""}`);
+        }
       }
     }
   } catch (err) {

@@ -388,6 +388,9 @@ def get_accounts(mask_passwords: bool = True) -> List[Dict[str, Any]]:
             d["pay_password"] = decrypt_password(d.get("pay_password", ""))
         d["withdrawal_amounts"] = _parse_withdrawal_amounts(d.get("withdrawal_amounts"))
         d["withdrawal_fee"] = float(d.get("withdrawal_fee") or 0.0)
+        win_start, win_end, win_source = resolve_window(d)
+        d["effective_window"] = "%s-%s" % (min_to_hhmm(win_start), min_to_hhmm(win_end))
+        d["window_source"] = win_source
         rows.append(d)
     conn.close()
     return rows
@@ -407,6 +410,9 @@ def get_account(account_id: int, decrypt: bool = True) -> Optional[Dict[str, Any
         d["pay_password"] = decrypt_password(d.get("pay_password", ""))
     d["withdrawal_amounts"] = _parse_withdrawal_amounts(d.get("withdrawal_amounts"))
     d["withdrawal_fee"] = float(d.get("withdrawal_fee") or 0.0)
+    win_start, win_end, win_source = resolve_window(d)
+    d["effective_window"] = "%s-%s" % (min_to_hhmm(win_start), min_to_hhmm(win_end))
+    d["window_source"] = win_source
     return d
 
 
