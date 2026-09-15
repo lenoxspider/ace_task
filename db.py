@@ -9,7 +9,7 @@ import base64
 import hashlib
 import random
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
 
@@ -17,6 +17,22 @@ load_dotenv()
 
 DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 DB_PATH = os.path.join(DB_DIR, "accounts.db")
+
+# Ace775's working-hours window (09:00-17:00 GMT) means a "day" is a GMT day.
+# All daily accounting here is anchored to UTC, not the host's local timezone.
+GMT = timezone.utc
+
+
+def _utc_now() -> datetime:
+    return datetime.now(GMT)
+
+
+def _utc_now_str() -> str:
+    return _utc_now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _utc_today_str() -> str:
+    return _utc_now().strftime("%Y-%m-%d")
 
 
 def normalize_phone(phone: str) -> str:
@@ -112,6 +128,20 @@ def init_db():
             earned REAL DEFAULT 0.0,
             balance TEXT DEFAULT '0'
         )
+    """)
+
+    # Idempotent run log: collapse any existing duplicate rows, then enforce uniqueness
+    # so a repeated/retried update can never book the same run twice.
+    cursor.execute("""
+        DELETE FROM run_history
+        WHERE id NOT IN (
+            SELECT MIN(id) FROM run_history
+            GROUP BY account_id, run_time, status, tasks_done, earned
+        )
+    """)
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_run_history_unique
+        ON run_history (account_id, run_time, status, tasks_done, earned)
     """)
 
     # Migration: ensure lifetime and withdrawal columns exist for existing databases
@@ -254,7 +284,7 @@ def check_and_reset_daily_stats():
     Ensures accounts table daily counters (tasks_done_today, earned_today)
     are reset to 0 for accounts whose last run was before today.
     """
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_str = _utc_today_str()
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -434,9 +464,9 @@ def record_run_history(account_id: int, phone: str, label: str, status: str, tas
     """Store audit log entry of an automation execution (#2)."""
     conn = get_connection()
     cursor = conn.cursor()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now_str()
     cursor.execute("""
-        INSERT INTO run_history (account_id, phone, label, run_time, status, tasks_done, earned, balance)
+        INSERT OR IGNORE INTO run_history (account_id, phone, label, run_time, status, tasks_done, earned, balance)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (account_id, phone, label, now, status, tasks_done, earned, str(balance)))
     # Cap history at 500 records
@@ -458,6 +488,37 @@ def get_run_history(account_id: Optional[int] = None, limit: int = 50) -> List[D
     return rows
 
 
+def _observed_earnings(cursor, account_id: int, date_str: Optional[str] = None) -> Dict[str, float]:
+    """Sum of this account's recorded run history, optionally limited to one GMT day."""
+    if date_str:
+        cursor.execute(
+            "SELECT COALESCE(SUM(tasks_done), 0) AS tasks, COALESCE(SUM(earned), 0.0) AS earned "
+            "FROM run_history WHERE account_id = ? AND SUBSTR(run_time, 1, 10) = ?",
+            (account_id, date_str),
+        )
+    else:
+        cursor.execute(
+            "SELECT COALESCE(SUM(tasks_done), 0) AS tasks, COALESCE(SUM(earned), 0.0) AS earned "
+            "FROM run_history WHERE account_id = ?",
+            (account_id,),
+        )
+    row = cursor.fetchone()
+    return {"tasks": int(row["tasks"] or 0), "earned": float(row["earned"] or 0.0)}
+
+
+def _sync_daily_record(cursor, date_str: str):
+    """Rebuild the daily_records row for one date from run history (derived, never accumulated)."""
+    cursor.execute("DELETE FROM daily_records WHERE date = ?", (date_str,))
+    cursor.execute("""
+        INSERT INTO daily_records (date, tasks_count, earned_ghs)
+        SELECT SUBSTR(rh.run_time, 1, 10), COALESCE(SUM(rh.tasks_done), 0), COALESCE(SUM(rh.earned), 0.0)
+        FROM run_history rh
+        JOIN accounts a ON a.id = rh.account_id
+        WHERE a.enabled = 1 AND SUBSTR(rh.run_time, 1, 10) = ?
+        GROUP BY SUBSTR(rh.run_time, 1, 10)
+    """, (date_str,))
+
+
 def update_account_stats(account_id: int, vip_level: Optional[str] = None, balance: Optional[str] = None,
                          income_balance: Optional[float] = None, personal_balance: Optional[float] = None,
                          last_status: Optional[str] = None, tasks_done: int = 0, earned: float = 0.0,
@@ -466,39 +527,37 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
                          withdrawal_amounts: Optional[Any] = None, withdrawal_fee: Optional[float] = None):
     conn = get_connection()
     cursor = conn.cursor()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = _utc_now_str()
+    today_str = _utc_today_str()
 
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    cursor.execute("SELECT tasks_done_today, earned_today, total_tasks_done, total_earned_ghs, last_run_time FROM accounts WHERE id = ?", (account_id,))
+    cursor.execute("SELECT phone, label, balance FROM accounts WHERE id = ?", (account_id,))
     current = cursor.fetchone()
-    last_run = (current["last_run_time"] or "") if current else ""
+    if not current:
+        conn.close()
+        return
 
-    # If last run was not today, start daily counters fresh from 0
-    if not last_run.startswith(today_str):
-        curr_td_today = 0
-        curr_earned_today = 0.0
-    else:
-        curr_td_today = current["tasks_done_today"] if current and current["tasks_done_today"] is not None else 0
-        curr_earned_today = current["earned_today"] if current and current["earned_today"] is not None else 0.0
+    # 1. Record this run (idempotently) so it is part of the audit trail.
+    if last_status and last_status != "Running...":
+        cursor.execute("""
+            INSERT OR IGNORE INTO run_history (account_id, phone, label, run_time, status, tasks_done, earned, balance)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (account_id, current["phone"], current["label"] or current["phone"], now, last_status,
+              tasks_done, earned, str(balance if balance is not None else (current["balance"] or "0"))))
+        # Cap history at 500 records
+        cursor.execute("DELETE FROM run_history WHERE id NOT IN (SELECT id FROM run_history ORDER BY id DESC LIMIT 500)")
 
-    curr_total_tasks = current["total_tasks_done"] if current and current["total_tasks_done"] is not None else 0
-    curr_total_earned = current["total_earned_ghs"] if current and current["total_earned_ghs"] is not None else 0.0
+    # 2. Daily / lifetime counters take the platform's own absolute figures whenever it
+    #    reports them. Those are idempotent, so a repeated run or a double-clicked refresh
+    #    can no longer double-book today's profit (the old code accumulated deltas and then
+    #    took a running max, which is what made the numbers ratchet up and diverge).
+    #    We fall back to this account's recorded history only when the platform is silent.
+    obs_today = _observed_earnings(cursor, account_id, today_str)
+    obs_all = _observed_earnings(cursor, account_id)
 
-    new_td_today = curr_td_today + tasks_done
-    if tasks_done_today is not None:
-        new_td_today = max(new_td_today, int(tasks_done_today))
-
-    new_earned_today = curr_earned_today + earned
-    if earned_today is not None:
-        new_earned_today = max(new_earned_today, float(earned_today))
-
-    new_total_tasks = curr_total_tasks + tasks_done
-    if lifetime_tasks is not None:
-        new_total_tasks = max(new_total_tasks, int(lifetime_tasks))
-
-    new_total_earned = curr_total_earned + earned
-    if lifetime_earned is not None:
-        new_total_earned = max(new_total_earned, float(lifetime_earned))
+    new_td_today = int(tasks_done_today) if tasks_done_today else obs_today["tasks"]
+    new_earned_today = float(earned_today) if earned_today else obs_today["earned"]
+    new_total_tasks = int(lifetime_tasks) if lifetime_tasks else obs_all["tasks"]
+    new_total_earned = float(lifetime_earned) if lifetime_earned else obs_all["earned"]
 
     # Format withdrawal amounts if provided
     w_amts_str = None
@@ -523,84 +582,67 @@ def update_account_stats(account_id: int, vip_level: Optional[str] = None, balan
             total_tasks_done = ?,
             total_earned_ghs = ?
         WHERE id = ?
-    """, (vip_level, balance, income_balance, personal_balance, w_amts_str, withdrawal_fee, last_status, now, new_td_today, new_earned_today, new_total_tasks, new_total_earned, account_id))
+    """, (vip_level, balance, income_balance, personal_balance, w_amts_str, withdrawal_fee, last_status, now,
+          new_td_today, new_earned_today, new_total_tasks, new_total_earned, account_id))
+
+    # 3. Keep the derived daily ledger in sync so it can never drift from run history.
+    _sync_daily_record(cursor, today_str)
+
     conn.commit()
-
-    # Fetch updated account details for run history
-    cursor.execute("SELECT phone, label, balance FROM accounts WHERE id = ?", (account_id,))
-    acc_row = cursor.fetchone()
-    if acc_row and last_status and last_status != "Running...":
-        record_run_history(
-            account_id=account_id,
-            phone=acc_row["phone"],
-            label=acc_row["label"] or acc_row["phone"],
-            status=last_status,
-            tasks_done=tasks_done,
-            earned=earned,
-            balance=balance or acc_row["balance"] or "0"
-        )
-
-    if tasks_done > 0 or earned > 0:
-        record_daily_earnings(tasks_done, earned)
-
     conn.close()
 
 
-def record_daily_earnings(tasks_done: int, earned: float):
-    today = datetime.now().strftime("%Y-%m-%d")
+def record_daily_earnings(tasks_done: int = 0, earned: float = 0.0):
+    """Compatibility shim: the daily ledger is now derived from run history, not accumulated."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO daily_records (date, tasks_count, earned_ghs)
-        VALUES (?, ?, ?)
-        ON CONFLICT(date) DO UPDATE SET
-            tasks_count = tasks_count + excluded.tasks_count,
-            earned_ghs = earned_ghs + excluded.earned_ghs
-    """, (today, tasks_done, earned))
+    _sync_daily_record(cursor, _utc_today_str())
     conn.commit()
     conn.close()
+
+
+def _today_totals(cursor) -> Dict[str, float]:
+    """Today's profit/tasks across active accounts - the single source of truth.
+
+    The dashboard card, the per-account cards and the 7-day chart all read today from
+    here, so they can no longer disagree with each other.
+    """
+    cursor.execute("""
+        SELECT
+            COALESCE(SUM(tasks_done_today), 0) as tasks,
+            COALESCE(SUM(earned_today), 0.0) as earned
+        FROM accounts
+        WHERE enabled = 1
+    """)
+    row = cursor.fetchone()
+    return {"tasks": int(row["tasks"] or 0), "earned": float(row["earned"] or 0.0)}
 
 
 def get_last_7_days_analytics() -> List[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.cursor()
-    
-    # Generate past 7 days list
-    today = datetime.now()
+
+    # Generate past 7 days list (GMT, matching the platform's working-hours day)
+    today = _utc_now()
     dates = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
     min_date = dates[0]
-    
-    # Track earnings and tasks only for active accounts (enabled = 1)
+    today_str = dates[-1]
+
+    # Past days come from the run log (active accounts only)
     cursor.execute("""
-        SELECT 
-            SUBSTR(rh.run_time, 1, 10) as date, 
-            SUM(rh.tasks_done) as tasks, 
-            SUM(rh.earned) as earned 
-        FROM run_history rh 
-        JOIN accounts a ON rh.account_id = a.id 
-        WHERE a.enabled = 1 AND rh.run_time >= ? 
+        SELECT
+            SUBSTR(rh.run_time, 1, 10) as date,
+            SUM(rh.tasks_done) as tasks,
+            SUM(rh.earned) as earned
+        FROM run_history rh
+        JOIN accounts a ON rh.account_id = a.id
+        WHERE a.enabled = 1 AND rh.run_time >= ?
         GROUP BY SUBSTR(rh.run_time, 1, 10)
     """, (min_date,))
     rows = {row["date"]: {"tasks": row["tasks"] or 0, "earned": row["earned"] or 0.0} for row in cursor.fetchall()}
 
-    # Ensure today's chart point directly reflects active accounts' current earnings
-    cursor.execute("""
-        SELECT 
-            SUM(tasks_done_today) as tasks, 
-            SUM(earned_today) as earned 
-        FROM accounts 
-        WHERE enabled = 1
-    """)
-    today_active = cursor.fetchone()
-    today_str = today.strftime("%Y-%m-%d")
-    if today_active:
-        today_tasks = today_active["tasks"] or 0
-        today_earned = today_active["earned"] or 0.0
-        if today_str in rows:
-            rows[today_str]["tasks"] = max(rows[today_str]["tasks"], today_tasks)
-            rows[today_str]["earned"] = max(rows[today_str]["earned"], today_earned)
-        else:
-            rows[today_str] = {"tasks": today_tasks, "earned": today_earned}
+    # Today is read from exactly the same source as the dashboard card
+    rows[today_str] = _today_totals(cursor)
 
     conn.close()
 
@@ -621,12 +663,13 @@ def get_dashboard_stats() -> Dict[str, Any]:
     check_and_reset_daily_stats()
     conn = get_connection()
     cursor = conn.cursor()
+
+    today = _today_totals(cursor)
+
     cursor.execute("""
-        SELECT 
-            COUNT(*) as total, 
-            SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) as active, 
-            SUM(CASE WHEN enabled = 1 THEN tasks_done_today ELSE 0 END) as tasks, 
-            SUM(CASE WHEN enabled = 1 THEN earned_today ELSE 0 END) as earned,
+        SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) as active,
             SUM(CASE WHEN enabled = 1 THEN total_tasks_done ELSE 0 END) as lifetime_tasks,
             SUM(CASE WHEN enabled = 1 THEN total_earned_ghs ELSE 0 END) as lifetime_earned
         FROM accounts
@@ -636,15 +679,13 @@ def get_dashboard_stats() -> Dict[str, Any]:
 
     total = row["total"] or 0
     active = row["active"] or 0
-    tasks = row["tasks"] or 0
-    earned = row["earned"] or 0.0
     lifetime_tasks = row["lifetime_tasks"] or 0
     lifetime_earned = row["lifetime_earned"] or 0.0
     return {
         "total_accounts": total,
         "active_accounts": active,
-        "tasks_completed_today": tasks,
-        "total_earned_today": round(earned, 2),
+        "tasks_completed_today": today["tasks"],
+        "total_earned_today": round(today["earned"], 2),
         "lifetime_tasks": lifetime_tasks,
         "lifetime_earned": round(lifetime_earned, 2)
     }
