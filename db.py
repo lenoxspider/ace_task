@@ -861,7 +861,7 @@ def calculate_next_withdrawal_slot(conn: Optional[sqlite3.Connection] = None) ->
 
         if last_row and last_row[0]:
             try:
-                last_dt = datetime.strptime(last_row[0], "%Y-%m-%d %H:%M:%S")
+                last_dt = datetime.strptime(last_row[0], "%Y-%m-%d %H:%M:%S").replace(tzinfo=GMT)
             except ValueError:
                 last_dt = now
 
