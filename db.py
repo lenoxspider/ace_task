@@ -339,16 +339,22 @@ def resolve_window(account: Dict[str, Any]) -> Tuple[int, int, str]:
     """Effective (start_min, end_min, source) for an account.
 
     An account's own window wins; accounts without one use the default window setting.
+    If window_start is specified without window_end, end defaults to start + 60 minutes.
     """
     start = hhmm_to_min(account.get("window_start") or "")
     end = hhmm_to_min(account.get("window_end") or "")
-    if start is not None and end is not None and end > start:
-        return start, end, "account"
 
     d_start = hhmm_to_min(get_setting("default_window_start", "04:00")) or 4 * 60
     d_end = hhmm_to_min(get_setting("default_window_end", "08:00")) or 8 * 60
     if d_end <= d_start:
         d_end = min(24 * 60, d_start + 60)
+
+    if start is not None and end is not None and end > start:
+        return start, end, "account"
+    elif start is not None:
+        calc_end = min(24 * 60, start + 60)
+        return start, calc_end, "account"
+
     return d_start, d_end, "default"
 
 
