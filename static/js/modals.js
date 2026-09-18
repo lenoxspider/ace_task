@@ -248,6 +248,7 @@
     var id = Ace.qs("#acc-id").value;
     var p = payload();
     if (!p.phone) { banner("acc-banner", "err", "Phone number is required."); return; }
+    if (!id && !p.password) { banner("acc-banner", "err", "Password is required for new accounts."); return; }
     var btn = Ace.qs("#acc-save");
     Ace.busy(btn, true);
     var req = id ? Ace.api.put("/api/accounts/" + id, p) : Ace.api.post("/api/accounts", p);
@@ -264,12 +265,18 @@
     var phone = Ace.qs("#acc-phone").value.trim();
     var pw = Ace.qs("#acc-password").value;
     if (!phone) { banner("acc-banner", "err", "Enter a phone number first."); return; }
+    if (!id && !pw) { banner("acc-banner", "err", "Enter account password to test login."); return; }
     var btn = Ace.qs("#acc-test");
     Ace.busy(btn, true);
     banner("acc-banner", "info", "Verifying credentials with Ace775…");
     Ace.api.post("/api/accounts/verify", { account_id: id ? Number(id) : null, phone: phone, password: pw })
       .then(function (d) {
-        banner("acc-banner", "ok", "Login OK — VIP " + esc(d.grade || d.vip_level || "?") + ", balance " + esc(d.balance || "0") + " GHS.");
+        if (!d || d.valid === false) {
+          banner("acc-banner", "err", (d && d.message) || "Verification failed — invalid credentials.");
+          return;
+        }
+        var msg = d.message || ("Login OK — VIP " + esc(d.grade || d.vip_level || "?") + ", balance " + esc(d.balance || "0") + " GHS.");
+        banner("acc-banner", "ok", msg);
       })
       .catch(function (e) { banner("acc-banner", "err", e.message || "Verification failed."); })
       .then(function () { Ace.busy(btn, false); });

@@ -675,17 +675,13 @@ def verify_account_api(item: AccountVerifyRequest):
             "personal_balance": pers_bal,
             "withdrawal_amounts": w_amts,
             "withdrawal_fee": w_fee,
-            "message": f"Logins verified successfully! VIP: {vip} | Income: {inc_bal:.2f} GHS | Fee: {w_fee}%"
+            "message": f"Login verified successfully! VIP: {vip} | Balance: {bal} GHS"
         }
     else:
         err = bot.stats.get("error", "Login failed. Please check credentials.")
         if err.startswith("Login failed: "):
             err = err[14:]
-        return {
-            "valid": False,
-            "phone": clean_phone,
-            "message": err
-        }
+        raise HTTPException(status_code=400, detail=f"Ace775 Verification Failed: {err}")
 
 
 @app.post("/api/accounts")
